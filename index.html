@@ -3,13 +3,12 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tower AR</title>
+    <title>Zeus AR - Fixed Anchor</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/three.js/build/ar-threex-location-only.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { overflow: hidden; font-family: sans-serif; }
+        body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
 
         #overlay {
             position: fixed; inset: 0;
@@ -18,121 +17,134 @@
             align-items: center; justify-content: center;
             color: #fff; text-align: center; padding: 20px;
         }
-        #overlay h2 { font-size: 1.4rem; margin-bottom: 12px; }
-        #overlay p  { font-size: 0.9rem; opacity: 0.7; margin-bottom: 24px; }
 
         #hud {
-            position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
-            z-index: 100; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);
-            padding: 12px 16px; border-radius: 14px;
-            color: #fff; font-size: 12px; width: 90%; max-width: 380px;
-            display: none;
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 100; background: rgba(0,0,0,0.8); backdrop-filter: blur(10px);
+            padding: 15px; border-radius: 18px;
+            color: #fff; font-size: 13px; width: 90%; max-width: 350px;
+            display: none; border: 1px solid rgba(255,255,255,0.1);
         }
-        #hud #debug { margin-bottom: 8px; opacity: 0.8; }
 
         button {
-            width: 100%; padding: 13px; background: #fbbf24;
-            border: none; font-weight: 700; border-radius: 8px;
-            margin: 4px 0; cursor: pointer; font-size: 14px;
+            width: 100%; padding: 15px; background: #fbbf24;
+            border: none; font-weight: 800; border-radius: 10px;
+            text-transform: uppercase; letter-spacing: 1px;
+            cursor: pointer; margin-top: 10px;
         }
-        button:disabled { opacity: 0.4; cursor: default; }
+        button:disabled { opacity: 0.3; }
 
-        .a-enter-vr, .a-orientation-modal { display: none !important; }
+        #debug { font-family: monospace; margin-bottom: 8px; color: #aaa; }
     </style>
 </head>
 <body>
 
 <div id="overlay">
-    <h2>Zeus AR</h2>
-    <p>Tap Start to allow camera, GPS and compass.</p>
-    <button id="startBtn" onclick="startAR()">START</button>
+    <h2 style="margin-bottom: 10px;">ZEUS AR</h2>
+    <p style="margin-bottom: 20px; opacity: 0.8;">Requires Camera, GPS, and Compass.</p>
+    <button onclick="startAR()">Initialize AR</button>
 </div>
 
 <div id="hud">
-    <div id="debug">GPS: searching…</div>
-    <button id="dropBtn" onclick="dropTower()" disabled>PLACE ZEUS HERE</button>
+    <div id="debug">Waiting for GPS...</div>
+    <button id="dropBtn" onclick="dropTower()" disabled>PLACE ZEUS (20m North)</button>
 </div>
 
 <a-scene
     vr-mode-ui="enabled: false"
-    arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;"
-    id="scene">
-
+    embedded
+    arjs="sourceType: webcam; debugUIEnabled: false; videoTexture: true;">
+    
     <a-assets>
         <a-asset-item id="zeus-model" src="zeus.glb"></a-asset-item>
     </a-assets>
 
-    <a-camera id="cam" gps-camera rotation-reader></a-camera>
+    <a-camera id="cam" gps-camera="minDistance: 1; maxDistance: 1000;" rotation-reader></a-camera>
 
-    <a-light type="ambient"     intensity="1.5"></a-light>
-    <a-light type="directional" position="1 10 1" intensity="1.2"></a-light>
+    <a-light type="ambient" intensity="1.0"></a-light>
+    <a-light type="directional" position="0 10 0" intensity="1.0"></a-light>
 </a-scene>
 
 <script>
-const ALPHA = 0.2;
-let smoothLat = null, smoothLng = null;
-let deployed  = false;
-
-function smoothGPS(lat, lng) {
-    if (smoothLat === null) { smoothLat = lat; smoothLng = lng; return; }
-    smoothLat = ALPHA * lat + (1 - ALPHA) * smoothLat;
-    smoothLng = ALPHA * lng + (1 - ALPHA) * smoothLng;
-}
+let currentLat = null;
+let currentLng = null;
 
 async function startAR() {
-    // iOS 13+ requires an explicit user-gesture permission for the compass.
-    // Without this the camera never rotates and everything appears to follow you.
-    if (typeof DeviceOrientationEvent !== 'undefined' &&
-        typeof DeviceOrientationEvent.requestPermission === 'function') {
+    // 1. Handle iOS Compass Permissions
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         try {
-            const perm = await DeviceOrientationEvent.requestPermission();
-            if (perm !== 'granted') {
-                alert('Compass permission is required for AR anchoring.');
-                return;
+            const response = await DeviceOrientationEvent.requestPermission();
+            if (response !== 'granted') {
+                alert("Compass permission denied. The model will move with you.");
             }
         } catch (e) {
-            console.warn('DeviceOrientation permission error:', e);
+            console.error(e);
         }
     }
 
-    document.getElementById('overlay').style.display = 'none';
-    document.getElementById('hud').style.display     = 'block';
+    // 2. "Wake up" the orientation sensors
+    window.dispatchEvent(new Event('deviceorientation'));
+    window.dispatchEvent(new Event('compassneedscalibration'));
 
+    // 3. UI Transition
+    document.getElementById('overlay').style.display = 'none';
+    document.getElementById('hud').style.display = 'block';
+
+    // 4. Start Tracking
     navigator.geolocation.watchPosition(
         pos => {
-            const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-            smoothGPS(lat, lng);
-            document.getElementById('debug').textContent =
-                `GPS: ${smoothLat.toFixed(5)}, ${smoothLng.toFixed(5)}  ±${Math.round(accuracy)}m`;
-            document.getElementById('dropBtn').disabled = false;
+            currentLat = pos.coords.latitude;
+            currentLng = pos.coords.longitude;
+            
+            const acc = Math.round(pos.coords.accuracy);
+            document.getElementById('debug').innerHTML = 
+                `LAT: ${currentLat.toFixed(5)}<br>LNG: ${currentLng.toFixed(5)}<br>ACCURACY: ±${acc}m`;
+            
+            // Only enable button if accuracy is decent (under 50m)
+            if (acc < 50) {
+                document.getElementById('dropBtn').disabled = false;
+            }
         },
         err => {
-            document.getElementById('debug').textContent = 'GPS error: ' + err.message;
+            document.getElementById('debug').textContent = "GPS Error: " + err.message;
         },
-        { enableHighAccuracy: true, maximumAge: 0 }
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
     );
 }
 
 function dropTower() {
-    if (smoothLat === null) return;
+    if (!currentLat || !currentLng) return;
 
-    const old = document.getElementById('tower-anchor');
-    if (old) old.remove();
-    deployed = true;
+    const scene = document.querySelector('a-scene');
+    
+    // Clean up old instances
+    const existing = document.getElementById('zeus-anchor');
+    if (existing) existing.remove();
 
-    // 20 m north (1 deg lat ≈ 111 320 m → 20 m ≈ 0.00018 deg)
-    const lat = smoothLat + 0.00018;
-    const lng = smoothLng;
+    // Create the Anchor Entity
+    const anchor = document.createElement('a-entity');
+    anchor.setAttribute('id', 'zeus-anchor');
+    
+    // Offset logic: 0.0002 degrees is approx 22 meters
+    const targetLat = currentLat + 0.0002; 
+    const targetLng = currentLng;
 
-    // Inject as HTML string — same pattern as the working React app
-    document.getElementById('scene').insertAdjacentHTML('beforeend', `
-        <a-entity id="tower-anchor" gps-entity-place="latitude: ${lat}; longitude: ${lng};">
-            <a-entity gltf-model="#zeus-model" scale="30 30 30" position="0 0 0"></a-entity>
-        </a-entity>
-    `);
+    anchor.setAttribute('gps-entity-place', `latitude: ${targetLat}; longitude: ${targetLng};`);
 
-    document.getElementById('debug').textContent =
-        `Zeus at ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    // Create the Visual Model
+    const model = document.createElement('a-entity');
+    model.setAttribute('gltf-model', '#zeus-model');
+    model.setAttribute('scale', '20 20 20'); // Adjust based on your actual model size
+    model.setAttribute('position', '0 0 0'); // Height relative to ground
+    
+    // Ensure it's pointing toward the origin
+    model.setAttribute('rotation', '0 180 0');
+
+    anchor.appendChild(model);
+    scene.appendChild(anchor);
+
+    // Provide haptic/visual feedback
+    document.getElementById('debug').textContent = "ZEUS ANCHORED AT OFFSET";
 }
 </script>
 
