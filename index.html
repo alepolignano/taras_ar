@@ -47,17 +47,22 @@
 
 <div id="hud">
     <div id="debug">Waiting for GPS...</div>
-    <button id="dropBtn" onclick="dropTower()" disabled>PLACE ZEUS (20m North)</button>
+    <button id="dropBtn" onclick="dropTower()" disabled>PLACE ZEUS (In Front of Me)</button>
 </div>
 
 <a-scene
     vr-mode-ui="enabled: false"
     embedded
     arjs="sourceType: webcam; debugUIEnabled: false; videoTexture: true;">
-    
+
     <a-assets>
         <a-asset-item id="zeus-model" src="zeus.glb"></a-asset-item>
     </a-assets>
+
+    <!-- Zeus entity pre-created so AR.js can initialize it properly when placed -->
+    <a-entity id="zeus-anchor" visible="false">
+        <a-entity gltf-model="#zeus-model" scale="20 20 20" rotation="0 180 0" position="0 0 0"></a-entity>
+    </a-entity>
 
     <a-camera id="cam" gps-camera="minDistance: 1; maxDistance: 1000;" rotation-reader></a-camera>
 
@@ -68,6 +73,20 @@
 <script>
 let currentLat = null;
 let currentLng = null;
+let compassHeading = 0; // degrees, 0=North, 90=East, 180=South, 270=West
+
+// Track absolute compass heading (works on both iOS and Android)
+function onOrientation(e) {
+    if (e.webkitCompassHeading !== undefined) {
+        // iOS: webkitCompassHeading is 0=North, clockwise
+        compassHeading = e.webkitCompassHeading;
+    } else if (e.alpha !== null) {
+        // Android absolute orientation: alpha is CCW from north, convert to CW
+        compassHeading = (360 - e.alpha) % 360;
+    }
+}
+window.addEventListener('deviceorientationabsolute', onOrientation, true);
+window.addEventListener('deviceorientation', onOrientation, true);
 
 async function startAR() {
     // 1. Handle iOS Compass Permissions
@@ -95,11 +114,11 @@ async function startAR() {
         pos => {
             currentLat = pos.coords.latitude;
             currentLng = pos.coords.longitude;
-            
+
             const acc = Math.round(pos.coords.accuracy);
-            document.getElementById('debug').innerHTML = 
-                `LAT: ${currentLat.toFixed(5)}<br>LNG: ${currentLng.toFixed(5)}<br>ACCURACY: ±${acc}m`;
-            
+            document.getElementById('debug').innerHTML =
+                `LAT: ${currentLat.toFixed(5)}<br>LNG: ${currentLng.toFixed(5)}<br>ACCURACY: ±${acc}m | HDG: ${Math.round(compassHeading)}°`;
+
             // Only enable button if accuracy is decent (under 50m)
             if (acc < 50) {
                 document.getElementById('dropBtn').disabled = false;
@@ -115,21 +134,25 @@ async function startAR() {
 function dropTower() {
     if (!currentLat || !currentLng) return;
 
-    const existing = document.getElementById('zeus-anchor');
-    if (existing) existing.remove();
+    // Place Zeus 5m directly in front of the user (in the direction they're facing)
+    const distance = 5; // meters
+    const headingRad = (compassHeading * Math.PI) / 180;
 
-    // 20 m north (1 deg lat ≈ 111 320 m → 20 m ≈ 0.00018 deg)
-    const targetLat = currentLat + 0.00018;
-    const targetLng = currentLng;
+    // Convert bearing + distance to lat/lng offset
+    // 1 deg lat ≈ 111,320 m; 1 deg lng ≈ 111,320 * cos(lat) m
+    const dLat = (distance * Math.cos(headingRad)) / 111320;
+    const dLng = (distance * Math.sin(headingRad)) / (111320 * Math.cos(currentLat * Math.PI / 180));
 
-    // Inject as HTML string — same pattern as the working React app
-    document.querySelector('a-scene').insertAdjacentHTML('beforeend', `
-        <a-entity id="zeus-anchor" gps-entity-place="latitude: ${targetLat}; longitude: ${targetLng};">
-            <a-entity gltf-model="#zeus-model" scale="20 20 20" rotation="0 180 0" position="0 0 0"></a-entity>
-        </a-entity>
-    `);
+    const targetLat = currentLat + dLat;
+    const targetLng = currentLng + dLng;
 
-    document.getElementById('debug').textContent = `Zeus at ${targetLat.toFixed(5)}, ${targetLng.toFixed(5)}`;
+    // Use setAttribute on the pre-existing entity — avoids AR.js init race conditions
+    const anchor = document.getElementById('zeus-anchor');
+    anchor.setAttribute('gps-entity-place', `latitude: ${targetLat}; longitude: ${targetLng}`);
+    anchor.setAttribute('visible', 'true');
+
+    document.getElementById('debug').textContent =
+        `Zeus 5m ahead | heading: ${Math.round(compassHeading)}° | ${targetLat.toFixed(5)}, ${targetLng.toFixed(5)}`;
 }
 </script>
 
