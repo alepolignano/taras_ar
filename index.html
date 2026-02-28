@@ -33,7 +33,7 @@
 
     <div id="controls" class="controls" style="display:none;">
         <div id="debug">GPS: Signal Searching...</div>
-        <button onclick="deploy()">DROP TOWER 5m AHEAD</button>
+        <div style="color:#fbbf24; margin: 8px 0; font-size:13px;">⚠️ GEOMETRY TEST — tower locked to camera</div>
 
         <div class="slider-group">
             <label>Vertical Offset: <span id="vVal">0</span>m</label>
@@ -47,38 +47,35 @@
 
     <a-scene embedded arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;" vr-mode-ui="enabled: false">
 
-        <!-- Golden tower anchor (placed via GPS on deploy) -->
-        <a-entity id="anchor-point">
-            <a-entity id="tower-container">
+        <a-camera>
+            <!-- Tower attached to camera — always visible regardless of GPS/position.
+                 Offset: 20 units ahead (z=-20), centred, base at y=-3 so shaft fills view. -->
+            <a-entity position="0 -3 -20">
 
                 <!-- Base plinth -->
-                <a-box id="tower"
+                <a-box
                     position="0 0.75 0"
                     width="4" height="1.5" depth="4"
-                    material="color: #FFD700; metalness: 0.9; roughness: 0.1"
-                    visible="false">
+                    material="color: #FFD700; metalness: 0.9; roughness: 0.1">
                 </a-box>
 
-                <!-- Main shaft (27m tall, centred at y=15.75 so bottom at 1.5) -->
-                <a-cylinder id="tower-shaft"
+                <!-- Main shaft -->
+                <a-cylinder
                     position="0 15.75 0"
                     radius="1.2" height="27"
-                    material="color: #FFD700; metalness: 0.9; roughness: 0.1"
-                    visible="false">
+                    material="color: #FFD700; metalness: 0.9; roughness: 0.1">
                 </a-cylinder>
 
-                <!-- Tapered top section (1.5m, sits at y=29.25) -->
-                <a-cone id="tower-top"
+                <!-- Pointed tip -->
+                <a-cone
                     position="0 29.25 0"
                     radius-bottom="1.2" radius-top="0.05" height="1.5"
-                    material="color: #FFF176; metalness: 1.0; roughness: 0.05"
-                    visible="false">
+                    material="color: #FFF176; metalness: 1.0; roughness: 0.05">
                 </a-cone>
 
             </a-entity>
-        </a-entity>
+        </a-camera>
 
-        <a-camera gps-camera="gpsMinDistance: 1;" rotation-reader></a-camera>
         <a-light type="ambient" intensity="1.5"></a-light>
         <a-light type="directional" position="1 10 1" intensity="1.5"></a-light>
     </a-scene>
