@@ -114,8 +114,9 @@ function dropTower() {
     }
     deployed = true;
 
-    // Use the smoothed coordinate so placement is stable
-    const lat = smoothLat;
+    // Offset 20 m north so the tower is in front of you, not around you
+    // 1 degree latitude ≈ 111 320 m  →  20 m ≈ 0.00018 deg
+    const lat = smoothLat + 0.00018;
     const lng = smoothLng;
 
     const anchor = document.createElement('a-entity');
