@@ -43,14 +43,14 @@
 <body>
 
 <div id="overlay">
-    <h2>30m Golden Tower AR</h2>
-    <p>Point your camera at the ground ahead,<br>then tap Start.</p>
+    <h2>Zeus AR</h2>
+    <p>Tap Start to allow camera, GPS and compass.</p>
     <button id="startBtn" onclick="startAR()">START</button>
 </div>
 
 <div id="hud">
     <div id="debug">GPS: searching…</div>
-    <button id="dropBtn" onclick="dropTower()" disabled>DROP TOWER HERE</button>
+    <button id="dropBtn" onclick="dropTower()" disabled>PLACE ZEUS HERE</button>
 </div>
 
 <a-scene
@@ -69,11 +69,8 @@
 </a-scene>
 
 <script>
-// ── GPS smoothing ────────────────────────────────────────────────────────────
-// Exponential moving average keeps the placed coordinate stable.
-const ALPHA = 0.2;          // lower = smoother but slower to settle
+const ALPHA = 0.2;
 let smoothLat = null, smoothLng = null;
-let watchId   = null;
 let deployed  = false;
 
 function smoothGPS(lat, lng) {
@@ -82,12 +79,26 @@ function smoothGPS(lat, lng) {
     smoothLng = ALPHA * lng + (1 - ALPHA) * smoothLng;
 }
 
-// ── AR init ──────────────────────────────────────────────────────────────────
-function startAR() {
+async function startAR() {
+    // iOS 13+ requires an explicit user-gesture permission for the compass.
+    // Without this the camera never rotates and everything appears to follow you.
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+            const perm = await DeviceOrientationEvent.requestPermission();
+            if (perm !== 'granted') {
+                alert('Compass permission is required for AR anchoring.');
+                return;
+            }
+        } catch (e) {
+            console.warn('DeviceOrientation permission error:', e);
+        }
+    }
+
     document.getElementById('overlay').style.display = 'none';
     document.getElementById('hud').style.display     = 'block';
 
-    watchId = navigator.geolocation.watchPosition(
+    navigator.geolocation.watchPosition(
         pos => {
             const { latitude: lat, longitude: lng, accuracy } = pos.coords;
             smoothGPS(lat, lng);
@@ -102,36 +113,26 @@ function startAR() {
     );
 }
 
-// ── Tower placement ───────────────────────────────────────────────────────────
 function dropTower() {
     if (smoothLat === null) return;
-    if (deployed) {
-        // Remove previous tower
-        const old = document.getElementById('tower-anchor');
-        if (old) old.parentNode.removeChild(old);
-    }
+
+    const old = document.getElementById('tower-anchor');
+    if (old) old.remove();
     deployed = true;
 
-    // Offset 20 m north so the tower is in front of you, not around you
-    // 1 degree latitude ≈ 111 320 m  →  20 m ≈ 0.00018 deg
+    // 20 m north (1 deg lat ≈ 111 320 m → 20 m ≈ 0.00018 deg)
     const lat = smoothLat + 0.00018;
     const lng = smoothLng;
 
-    const anchor = document.createElement('a-entity');
-    anchor.id = 'tower-anchor';
-    anchor.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lng};`);
-
-    // ── Zeus GLB model (30 m tall) ────────────────────────
-    const model = document.createElement('a-entity');
-    model.setAttribute('gltf-model', '#zeus-model');
-    model.setAttribute('scale',      '30 30 30');
-    model.setAttribute('position',   '0 0 0');
-
-    anchor.appendChild(model);
-    document.getElementById('scene').appendChild(anchor);
+    // Inject as HTML string — same pattern as the working React app
+    document.getElementById('scene').insertAdjacentHTML('beforeend', `
+        <a-entity id="tower-anchor" gps-entity-place="latitude: ${lat}; longitude: ${lng};">
+            <a-entity gltf-model="#zeus-model" scale="30 30 30" position="0 0 0"></a-entity>
+        </a-entity>
+    `);
 
     document.getElementById('debug').textContent =
-        `Tower placed at ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        `Zeus at ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
 </script>
 
