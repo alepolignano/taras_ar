@@ -2,30 +2,63 @@
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>AR Finder</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Fix: AR Camera & Geo-Anchor</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+    
     <style>
-        .ui { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 1000; 
-             background: rgba(0,0,0,0.8); color: white; padding: 15px; width: 90%; border-radius: 10px; font-family: sans-serif; }
-        button { width: 100%; padding: 10px; margin-top: 5px; background: #00d1b2; border: none; color: white; font-weight: bold; }
-        #debug { font-size: 10px; color: #00ff00; margin-top: 10px; }
+        body { margin: 0; overflow: hidden; font-family: sans-serif; }
+        .ui { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.7); z-index: 9999; display: flex; 
+            flex-direction: column; align-items: center; justify-content: center; color: white;
+        }
+        .controls {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 12px;
+            width: 85%; max-width: 350px; display: none; /* Hidden until started */
+        }
+        button { 
+            padding: 15px 30px; font-size: 18px; background: #00d1b2; 
+            color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;
+        }
+        input { width: 100%; margin: 5px 0; padding: 10px; box-sizing: border-box; }
+        #debug { font-size: 11px; color: #ffcc00; margin-top: 5px; }
     </style>
 </head>
 
-<body style="margin: 0; overflow: hidden;">
-    <div class="ui">
-        <input type="file" id="fileInput" accept=".glb" style="width:100%">
-        <button onclick="dropAtFeet()">DROP 5m IN FRONT OF ME</button>
-        <div id="debug">Waiting for GPS...</div>
+<body>
+    <div id="overlay" class="ui">
+        <h2>AR Location Tracker</h2>
+        <p>Ensure you are outdoors with a clear GPS signal.</p>
+        <button onclick="initAR()">START CAMERA & GPS</button>
     </div>
 
-    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; videoTexture: true;" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: true" device-orientation-permission-ui="enabled: true">
-        <a-assets id="assets"></a-assets>
-        
-        <a-entity id="anchor" scale="1 1 1" visible="false"></a-entity>
+    <div id="controls" class="controls">
+        <input type="file" id="fileInput" accept=".glb">
+        <button onclick="deploy()">ANCHOR MODEL AT FEET</button>
+        <div id="debug">Awaiting GPS fix...</div>
+    </div>
 
-        <a-camera id="camera" gps-camera="gpsMinDistance: 1;" rotation-reader far="10000"></a-camera>
+    <a-scene
+        embedded
+        loading-screen="enabled: false"
+        arjs="sourceType: webcam; debugUIEnabled: false; videoTexture: true;"
+        vr-mode-ui="enabled: false"
+        device-orientation-permission-ui="enabled: true"
+    >
+        <a-entity id="anchor" scale="1 1 1"></a-entity>
+
+        <a-camera 
+            id="camera" 
+            gps-camera="gpsMinDistance: 5; simulateAltitude: 1.6;" 
+            rotation-reader
+            far="10000"
+        ></a-camera>
+
+        <a-light type="ambient" intensity="1.5"></a-light>
+        <a-light type="directional" position="1 1 1" intensity="1"></a-light>
     </a-scene>
 
     <script>
@@ -33,36 +66,65 @@
         const debug = document.getElementById('debug');
         let userLat, userLng;
 
-        // Get current GPS constantly
-        navigator.geolocation.watchPosition(pos => {
-            userLat = pos.coords.latitude;
-            userLng = pos.coords.longitude;
+        // 1. Initialize AR only after user interaction
+        function initAR() {
+            document.getElementById('overlay').style.display = 'none';
+            document.getElementById('controls').style.display = 'block';
             
-            const dist = anchor.getAttribute('distance');
-            debug.innerText = `User: ${userLat.toFixed(5)}, ${userLng.toFixed(5)} | Dist: ${dist ? Math.round(dist) + 'm' : 'Not Set'}`;
-        });
+            // Force play video feed if it's stuck
+            const scene = document.querySelector('a-scene');
+            if (scene.hasLoaded) {
+                setupGPS();
+            } else {
+                scene.addEventListener('loaded', setupGPS);
+            }
+        }
 
-        function dropAtFeet() {
-            if (!userLat) { alert("Still getting GPS fix..."); return; }
+        function setupGPS() {
+            navigator.geolocation.watchPosition(
+                (pos) => {
+                    userLat = pos.coords.latitude;
+                    userLng = pos.coords.longitude;
+                    debug.innerText = `GPS Fixed: ${userLat.toFixed(5)}, ${userLng.toFixed(5)}`;
+                },
+                (err) => { debug.innerText = "GPS Error: " + err.message; },
+                { enableHighAccuracy: true }
+            );
+        }
 
-            // Place model 0.00005 degrees (~5 meters) north of user
+        function deploy() {
+            if (!userLat) {
+                alert("Waiting for high-accuracy GPS signal...");
+                return;
+            }
+
+            // Offset by ~5 meters North so it's in front of you
             const targetLat = userLat + 0.00005; 
             const targetLng = userLng;
 
+            // Cleanup & Set
+            anchor.removeAttribute('gltf-model');
+            anchor.removeAttribute('geometry');
             anchor.setAttribute('gps-entity-place', `latitude: ${targetLat}; longitude: ${targetLng};`);
-            
+
             const file = document.getElementById('fileInput').files[0];
             if (file) {
-                anchor.setAttribute('gltf-model', URL.createObjectURL(file));
+                const url = URL.createObjectURL(file);
+                anchor.setAttribute('gltf-model', url);
             } else {
-                // Red box fallback so we can at least see IF the system works
+                // Fallback box for testing
                 anchor.setAttribute('geometry', 'primitive: box; height: 2; width: 2; depth: 2');
-                anchor.setAttribute('material', 'color: red');
+                anchor.setAttribute('material', 'color: red; opacity: 0.8');
             }
-            
-            anchor.setAttribute('visible', 'true');
-            alert(`Dropped at: ${targetLat.toFixed(5)}, ${targetLng.toFixed(5)}`);
+
+            debug.innerText = `Anchored 5m North. Distance: calculating...`;
         }
+
+        // Distance Monitoring
+        window.addEventListener('gps-camera-update-position', () => {
+            const dist = anchor.getAttribute('distance');
+            if (dist) debug.innerText = `Distance: ${Math.round(dist)}m`;
+        });
     </script>
 </body>
 </html>
