@@ -58,6 +58,10 @@
     arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;"
     id="scene">
 
+    <a-assets>
+        <a-asset-item id="zeus-model" src="zeus.glb"></a-asset-item>
+    </a-assets>
+
     <!-- gpsMinDistance: don't reposition camera more than once per 3 m move
          positionMinAccuracy: ignore fixes worse than 100 m -->
     <a-camera
@@ -123,38 +127,13 @@ function dropTower() {
     anchor.id = 'tower-anchor';
     anchor.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lng};`);
 
-    // ── 30 m golden tower ────────────────────────────────
-    // Shaft: 28 m, centred at y=14, bottom at y=0
-    const shaft = document.createElement('a-box');
-    shaft.setAttribute('color',     '#F59E0B');
-    shaft.setAttribute('width',     '4');
-    shaft.setAttribute('height',    '28');
-    shaft.setAttribute('depth',     '4');
-    shaft.setAttribute('position',  '0 14 0');
-    shaft.setAttribute('metalness', '0.85');
-    shaft.setAttribute('roughness', '0.1');
+    // ── Zeus GLB model (30 m tall) ────────────────────────
+    const model = document.createElement('a-entity');
+    model.setAttribute('gltf-model', '#zeus-model');
+    model.setAttribute('scale',      '30 30 30');
+    model.setAttribute('position',   '0 0 0');
 
-    // Cap: 2 m, sits on top at y=29
-    const cap = document.createElement('a-box');
-    cap.setAttribute('color',     '#FCD34D');
-    cap.setAttribute('width',     '5');
-    cap.setAttribute('height',    '2');
-    cap.setAttribute('depth',     '5');
-    cap.setAttribute('position',  '0 29 0');
-    cap.setAttribute('metalness', '0.9');
-    cap.setAttribute('roughness', '0.05');
-
-    // Ground ring marker
-    const ring = document.createElement('a-ring');
-    ring.setAttribute('color',        '#FCD34D');
-    ring.setAttribute('radius-inner', '5');
-    ring.setAttribute('radius-outer', '6.5');
-    ring.setAttribute('position',     '0 0.1 0');
-    ring.setAttribute('rotation',     '-90 0 0');
-
-    anchor.appendChild(shaft);
-    anchor.appendChild(cap);
-    anchor.appendChild(ring);
+    anchor.appendChild(model);
     document.getElementById('scene').appendChild(anchor);
 
     document.getElementById('debug').textContent =
