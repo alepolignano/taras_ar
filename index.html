@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>Dynamic Geo-AR Anchor</title>
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+    
+    <style>
+        .ui-panel {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; background: rgba(0,0,0,0.8); color: white;
+            padding: 15px; border-radius: 10px; font-family: sans-serif; width: 80%; max-width: 400px;
+        }
+        input, button { width: 100%; margin: 5px 0; padding: 10px; border-radius: 5px; border: none; }
+        button { background: #ffcc00; font-weight: bold; cursor: pointer; }
+        .coords-row { display: flex; gap: 5px; }
+    </style>
+</head>
+
+<body style="margin: 0; overflow: hidden;">
+    <div class="ui-panel">
+        <div class="coords-row">
+            <input type="number" id="lat" placeholder="Latitude" step="any">
+            <input type="number" id="lng" placeholder="Longitude" step="any">
+        </div>
+        <input type="file" id="fileInput" accept=".glb">
+        <button onclick="updateAnchor()">Set Anchor</button>
+        <small id="status">Waiting for input...</small>
+    </div>
+
+    <a-scene
+        vr-mode-ui="enabled: false"
+        embedded
+        arjs="sourceType: webcam; debugUIEnabled: false; videoTexture: true;"
+    >
+        <a-assets id="assets"></a-assets>
+
+        <a-entity 
+            id="ar-model" 
+            gltf-model="" 
+            scale="1 1 1"
+            visible="false">
+        </a-entity>
+
+        <a-camera 
+            id="camera"
+            gps-camera="gpsMinDistance: 5; gpsTimeInterval: 1000;" 
+            rotation-reader>
+        </a-camera>
+    </a-scene>
+
+    <script>
+        function updateAnchor() {
+            const lat = document.getElementById('lat').value;
+            const lng = document.getElementById('lng').value;
+            const file = document.getElementById('fileInput').files[0];
+            const modelEntity = document.getElementById('ar-model');
+            const status = document.getElementById('status');
+
+            if (!lat || !lng) {
+                alert("Please enter coordinates.");
+                return;
+            }
+
+            // Update Coordinates
+            modelEntity.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lng};`);
+            
+            // Handle File Upload
+            if (file) {
+                const modelUrl = URL.createObjectURL(file);
+                modelEntity.setAttribute('gltf-model', modelUrl);
+                modelEntity.setAttribute('visible', 'true');
+                status.innerText = "Model Anchored!";
+            } else {
+                // Default to a golden tower if no file is uploaded
+                modelEntity.setAttribute('geometry', 'primitive: cylinder; height: 10; radius: 2');
+                modelEntity.setAttribute('material', 'color: gold; metalness: 0.8');
+                modelEntity.removeAttribute('gltf-model');
+                modelEntity.setAttribute('visible', 'true');
+                status.innerText = "Golden Tower Anchored!";
+            }
+        }
+
+        // Automatic Current Location Helper
+        window.onload = () => {
+            navigator.geolocation.getCurrentPosition((pos) => {
+                document.getElementById('lat').value = pos.coords.latitude;
+                document.getElementById('lng').value = pos.coords.longitude;
+            });
+        };
+    </script>
+</body>
+</html>
