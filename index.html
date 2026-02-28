@@ -55,7 +55,7 @@
 
 <a-scene
     vr-mode-ui="enabled: false"
-    arjs="sourceType: webcam; videoTexture: false; debugUIEnabled: false;"
+    arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;"
     id="scene">
 
     <a-assets>
@@ -81,32 +81,11 @@ const ALPHA = 0.2;          // lower = smoother but slower to settle
 let smoothLat = null, smoothLng = null;
 let watchId   = null;
 let deployed  = false;
-let statueLat = null, statueLng = null;
-let lastBuzz  = 0;
 
 function smoothGPS(lat, lng) {
     if (smoothLat === null) { smoothLat = lat; smoothLng = lng; return; }
     smoothLat = ALPHA * lat + (1 - ALPHA) * smoothLat;
     smoothLng = ALPHA * lng + (1 - ALPHA) * smoothLng;
-}
-
-function haversineM(lat1, lng1, lat2, lng2) {
-    const R = 6371000;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.asin(Math.sqrt(a));
-}
-
-function checkProximity(userLat, userLng) {
-    if (statueLat === null) return;
-    const dist = haversineM(userLat, userLng, statueLat, statueLng);
-    if (dist <= 1 && Date.now() - lastBuzz > 10000) {
-        navigator.vibrate([200, 100, 200]);   // buzz – pause – buzz
-        lastBuzz = Date.now();
-    }
 }
 
 // ── AR init ──────────────────────────────────────────────────────────────────
@@ -118,7 +97,6 @@ function startAR() {
         pos => {
             const { latitude: lat, longitude: lng, accuracy } = pos.coords;
             smoothGPS(lat, lng);
-            checkProximity(lat, lng);
             document.getElementById('debug').textContent =
                 `GPS: ${smoothLat.toFixed(5)}, ${smoothLng.toFixed(5)}  ±${Math.round(accuracy)}m`;
             document.getElementById('dropBtn').disabled = false;
@@ -140,14 +118,10 @@ function dropTower() {
     }
     deployed = true;
 
-    // Offset 20 m north so the statue is in front of you, not around you
+    // Offset 20 m north so the tower is in front of you, not around you
     // 1 degree latitude ≈ 111 320 m  →  20 m ≈ 0.00018 deg
     const lat = smoothLat + 0.00018;
     const lng = smoothLng;
-
-    // Store for proximity check
-    statueLat = lat;
-    statueLng = lng;
 
     const anchor = document.createElement('a-entity');
     anchor.id = 'tower-anchor';
