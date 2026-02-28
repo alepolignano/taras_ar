@@ -3,14 +3,14 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>30m Model Locator</title>
+    <title>30m Tower AR</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
         body { margin: 0; overflow: hidden; font-family: sans-serif; }
-        .setup-screen { 
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: #1a1a1a; z-index: 9999; display: flex; 
+        .setup-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #1a1a1a; z-index: 9999; display: flex;
             flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center;
         }
         .controls {
@@ -18,7 +18,7 @@
             z-index: 1000; background: rgba(0,0,0,0.85); padding: 12px; border-radius: 12px;
             width: 90%; max-width: 400px; color: white; font-size: 12px;
         }
-        button { width: 100%; padding: 12px; background: #fbbf24; border: none; font-weight: bold; border-radius: 5px; margin: 5px 0; }
+        button { width: 100%; padding: 12px; background: #fbbf24; border: none; font-weight: bold; border-radius: 5px; margin: 5px 0; cursor: pointer; }
         .slider-group { margin: 8px 0; }
         input[type=range] { width: 100%; }
     </style>
@@ -26,55 +26,79 @@
 
 <body>
     <div id="overlay" class="setup-screen">
-        <h2>30m Model Deployer</h2>
-        <p style="padding: 20px;">Step 1: Upload GLB<br>Step 2: Hit Start</p>
-        <input type="file" id="fileInput" accept=".glb" style="margin-bottom: 20px;">
+        <h2>30m Golden Tower AR</h2>
+        <p style="padding: 20px;">Allow camera &amp; GPS, then tap Start.</p>
         <button onclick="initAR()">START AR SYSTEM</button>
     </div>
 
     <div id="controls" class="controls" style="display:none;">
         <div id="debug">GPS: Signal Searching...</div>
-        <button onclick="deploy()">DROP MODEL 5m AHEAD</button>
-        
+        <button onclick="deploy()">DROP TOWER 5m AHEAD</button>
+
         <div class="slider-group">
-            <label>Vertical Offset (Elevation): <span id="vVal">0</span>m</label>
+            <label>Vertical Offset: <span id="vVal">0</span>m</label>
             <input type="range" id="vOffset" min="-50" max="50" value="0" oninput="updateVisuals()">
         </div>
         <div class="slider-group">
-            <label>Model Scale: <span id="sVal">1</span>x</label>
+            <label>Scale: <span id="sVal">1</span>x</label>
             <input type="range" id="sOffset" min="0.1" max="5" step="0.1" value="1" oninput="updateVisuals()">
         </div>
     </div>
 
     <a-scene embedded arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;" vr-mode-ui="enabled: false">
+
+        <!-- Golden tower anchor (placed via GPS on deploy) -->
         <a-entity id="anchor-point">
-            <a-entity id="model-container" rotation="0 0 0">
-                <a-entity id="actual-model" gltf-model=""></a-entity>
-                <a-box id="fallback" position="0 15 0" scale="2 30 2" material="color: red; opacity: 0.5" visible="false"></a-box>
+            <a-entity id="tower-container">
+
+                <!-- Base plinth -->
+                <a-box id="tower"
+                    position="0 0.75 0"
+                    width="4" height="1.5" depth="4"
+                    material="color: #FFD700; metalness: 0.9; roughness: 0.1"
+                    visible="false">
+                </a-box>
+
+                <!-- Main shaft (27m tall, centred at y=15.75 so bottom at 1.5) -->
+                <a-cylinder id="tower-shaft"
+                    position="0 15.75 0"
+                    radius="1.2" height="27"
+                    material="color: #FFD700; metalness: 0.9; roughness: 0.1"
+                    visible="false">
+                </a-cylinder>
+
+                <!-- Tapered top section (1.5m, sits at y=29.25) -->
+                <a-cone id="tower-top"
+                    position="0 29.25 0"
+                    radius-bottom="1.2" radius-top="0.05" height="1.5"
+                    material="color: #FFF176; metalness: 1.0; roughness: 0.05"
+                    visible="false">
+                </a-cone>
+
             </a-entity>
         </a-entity>
 
         <a-camera gps-camera="gpsMinDistance: 1;" rotation-reader></a-camera>
         <a-light type="ambient" intensity="1.5"></a-light>
-        <a-light type="directional" position="1 10 1" intensity="1"></a-light>
+        <a-light type="directional" position="1 10 1" intensity="1.5"></a-light>
     </a-scene>
 
     <script>
         let userLat, userLng;
-        const modelEnt = document.getElementById('actual-model');
-        const fallback = document.getElementById('fallback');
-        const anchor = document.getElementById('anchor-point');
-        const container = document.getElementById('model-container');
+        const anchor    = document.getElementById('anchor-point');
+        const container = document.getElementById('tower-container');
+        const parts     = ['tower', 'tower-shaft', 'tower-top'];
 
         function initAR() {
             document.getElementById('overlay').style.display = 'none';
             document.getElementById('controls').style.display = 'block';
-            
+
             navigator.geolocation.watchPosition(pos => {
                 userLat = pos.coords.latitude;
                 userLng = pos.coords.longitude;
-                document.getElementById('debug').innerText = `GPS Fixed: ${userLat.toFixed(5)}, ${userLng.toFixed(5)}`;
-            }, err => {
+                document.getElementById('debug').innerText =
+                    `GPS Fixed: ${userLat.toFixed(5)}, ${userLng.toFixed(5)}`;
+            }, () => {
                 document.getElementById('debug').innerText = "GPS Error. Check Permissions.";
             }, { enableHighAccuracy: true });
         }
@@ -82,27 +106,21 @@
         function deploy() {
             if (!userLat) return alert("Wait for GPS fix");
 
-            // Place 5m North
-            anchor.setAttribute('gps-entity-place', `latitude: ${userLat + 0.00005}; longitude: ${userLng};`);
-            
-            const file = document.getElementById('fileInput').files[0];
-            if (file) {
-                modelEnt.setAttribute('gltf-model', URL.createObjectURL(file));
-                fallback.setAttribute('visible', 'false');
-            } else {
-                fallback.setAttribute('visible', 'true');
-            }
+            // Place ~5m North of user
+            anchor.setAttribute('gps-entity-place',
+                `latitude: ${userLat + 0.000045}; longitude: ${userLng};`);
+
+            // Show all tower parts
+            parts.forEach(id => document.getElementById(id).setAttribute('visible', 'true'));
+
             updateVisuals();
         }
 
         function updateVisuals() {
             const v = document.getElementById('vOffset').value;
             const s = document.getElementById('sOffset').value;
-            
             document.getElementById('vVal').innerText = v;
             document.getElementById('sVal').innerText = s;
-
-            // Move model up/down (Crucial for 30m models indoors)
             container.setAttribute('position', `0 ${v} 0`);
             container.setAttribute('scale', `${s} ${s} ${s}`);
         }
