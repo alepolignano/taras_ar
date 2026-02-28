@@ -62,13 +62,7 @@
         <a-asset-item id="zeus-model" src="zeus.glb"></a-asset-item>
     </a-assets>
 
-    <!-- gpsMinDistance: don't reposition camera more than once per 3 m move
-         positionMinAccuracy: ignore fixes worse than 100 m -->
-    <a-camera
-        id="cam"
-        gps-camera="gpsMinDistance: 3; positionMinAccuracy: 100;"
-        rotation-reader>
-    </a-camera>
+    <a-camera id="cam" gps-camera rotation-reader></a-camera>
 
     <a-light type="ambient"     intensity="1.5"></a-light>
     <a-light type="directional" position="1 10 1" intensity="1.2"></a-light>
