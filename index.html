@@ -1,106 +1,53 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>15m Statue - Fixed Detection</title>
+    <title>AR Test - Red Box</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; font-family: sans-serif; }
-        #ui {
-            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 1000; background: rgba(0,0,0,0.85); color: white;
-            padding: 20px; border-radius: 15px; text-align: center; width: 300px; 
-            border: 2px solid #fbbf24; pointer-events: auto;
+        body { margin: 0; overflow: hidden; }
+        #debug-ui {
+            position: fixed; top: 10px; left: 10px; z-index: 9999;
+            background: rgba(0,0,0,0.8); color: #00ff00;
+            padding: 10px; font-family: monospace; font-size: 12px;
+            pointer-events: none; border-radius: 5px;
         }
-        .controls { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
-        button {
-            padding: 12px; background: #fbbf24; border: none;
-            border-radius: 8px; font-weight: bold; cursor: pointer; color: #000;
-        }
-        #status { font-weight: bold; color: #fbbf24; margin-bottom: 5px; }
-        /* Ensures the AR canvas is visible behind the UI */
-        canvas { z-index: 1; }
     </style>
 </head>
-
 <body style="margin: 0; overflow: hidden;">
 
-    <div id="ui">
-        <div id="status">1. UPLOAD YOUR .GLB</div>
-        <div class="controls">
-            <input type="file" id="fileInput" accept=".glb">
-            <div id="marker-tip" style="display:none; font-size: 11px; opacity: 0.8;">
-                2. Point camera at Hiro Marker.<br>Model will anchor when detected.
-            </div>
-            <button id="resetBtn" style="display:none;" onclick="resetPosition()">RESET ANCHOR</button>
-        </div>
+    <div id="debug-ui">
+        Status: <span id="status">Scanning for Hiro Marker...</span>
     </div>
 
     <a-scene 
         embedded 
         vr-mode-ui="enabled: false"
-        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_camera; matrixCodeType: 3x3;">
+        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_camera;"
+        renderer="logarithmicDepthBuffer: true; colorManagement: true;">
         
-        <a-assets id="assets-list"></a-assets>
-
         <a-marker preset="hiro" id="hiro-marker">
-            <a-ring color="#fbbf24" rotation="-90 0 0" radius-inner="0.5" radius-outer="0.6"></a-ring>
-            <a-sphere color="#fbbf24" radius="0.1"></a-sphere>
+            <a-box position="0 0.25 0" scale="0.5 0.5 0.5" material="color: red; opacity: 0.8;"></a-box>
+            <a-text value="BOX DETECTED" align="center" rotation="-90 0 0" position="0 0.1 0.6" color="yellow" width="3"></a-text>
         </a-marker>
-
-        <a-entity id="anchor-group" visible="false">
-            <a-entity id="statue-model" scale="15 15 15" position="0 0 0"></a-entity>
-        </a-entity>
 
         <a-entity camera></a-entity>
     </a-scene>
 
     <script>
-        const fileInput = document.getElementById('fileInput');
-        const statueModel = document.getElementById('statue-model');
-        const anchorGroup = document.getElementById('anchor-group');
-        const hiroMarker = document.getElementById('hiro-marker');
-        const status = document.getElementById('status');
-        const markerTip = document.getElementById('marker-tip');
-        const resetBtn = document.getElementById('resetBtn');
+        const marker = document.querySelector('#hiro-marker');
+        const status = document.querySelector('#status');
 
-        let isAnchored = false;
-
-        fileInput.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            const url = URL.createObjectURL(file);
-            statueModel.setAttribute('gltf-model', url);
-            status.innerText = "MODEL LOADED";
-            fileInput.style.display = "none";
-            markerTip.style.display = "block";
-            resetBtn.style.display = "block";
+        marker.addEventListener('markerFound', () => {
+            status.innerText = "MARKER FOUND!";
+            status.style.color = "#fbbf24";
+            console.log("Hiro Marker Found");
         });
 
-        // Use 'markerFound' event with a safety check
-        hiroMarker.addEventListener('markerFound', () => {
-            if (!isAnchored && statueModel.hasAttribute('gltf-model')) {
-                const worldPos = new THREE.Vector3();
-                hiroMarker.object3D.getWorldPosition(worldPos);
-                
-                const worldQuat = new THREE.Quaternion();
-                hiroMarker.object3D.getWorldQuaternion(worldQuat);
-
-                anchorGroup.object3D.position.copy(worldPos);
-                anchorGroup.object3D.quaternion.copy(worldQuat);
-                
-                anchorGroup.setAttribute('visible', 'true');
-                isAnchored = true;
-                status.innerText = "STATUE ANCHORED";
-                console.log("Marker found and anchored at:", worldPos);
-            }
+        marker.addEventListener('markerLost', () => {
+            status.innerText = "MARKER LOST - Scan again";
+            status.style.color = "#ff0000";
         });
-
-        function resetPosition() {
-            isAnchored = false;
-            anchorGroup.setAttribute('visible', 'false');
-            status.innerText = "SCANNING FOR HIRO...";
-        }
     </script>
 </body>
 </html>
