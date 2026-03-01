@@ -1,83 +1,86 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Fixed GLB Tower</title>
+    <title>AR.js Local GLB Uploader</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
       .ui {
         position: fixed; top: 10px; left: 10px; z-index: 999;
-        background: rgba(0,0,0,0.8); color: gold; padding: 15px;
-        border-radius: 10px; font-family: sans-serif; border: 1px solid gold;
+        background: rgba(0,0,0,0.85); color: #FFD700; padding: 15px;
+        border-radius: 12px; font-family: sans-serif; border: 2px solid #FFD700;
+        max-width: 250px;
       }
-      input { display: block; margin: 5px 0; width: 180px; }
-      button { width: 100%; padding: 10px; background: gold; font-weight: bold; margin-top: 5px; cursor: pointer; border: none; }
-      .hint { font-size: 10px; color: white; margin-top: 5px; }
+      input, button { width: 100%; margin: 8px 0; padding: 10px; box-sizing: border-box; }
+      label { font-size: 12px; font-weight: bold; }
+      .status { font-size: 10px; color: #0f0; margin-top: 5px; }
     </style>
   </head>
   <body style="margin: 0; overflow: hidden;">
     
     <div class="ui">
-      GLB URL: <input type="text" id="glbUrl" placeholder="https://path-to-your.glb">
-      LAT: <input type="number" id="lat" step="0.000001" placeholder="Latitude">
-      LON: <input type="number" id="lon" step="0.000001" placeholder="Longitude">
-      <button onclick="loadModel()">SPAWN MODEL</button>
-      <div class="hint">Wait for GPS accuracy < 10m for best results.</div>
-      <div id="status" style="font-size: 11px; color: #0f0;"></div>
+      <label>1. SELECT .GLB FILE</label>
+      <input type="file" id="fileInput" accept=".glb">
+      
+      <label>2. TARGET COORDS</label>
+      <input type="number" id="lat" step="0.000001" placeholder="Latitude">
+      <input type="number" id="lon" step="0.000001" placeholder="Longitude">
+      
+      <button onclick="deployModel()">PLACE & LOCK MODEL</button>
+      <div id="gps-status" class="status">Waiting for GPS...</div>
     </div>
 
     <a-scene
-      vr-mode-ui="enabled: false"
       embedded
+      vr-mode-ui="enabled: false"
       arjs="sourceType: webcam; debugUIEnabled: false;"
-      renderer="logarithmicDepthBuffer: true;"
+      renderer="logarithmicDepthBuffer: true; antialias: true;"
     >
-      <a-assets id="assets-list"></a-assets>
-      
-      <a-camera gps-camera="minDistance: 10; simulateAltitude: 0;" rotation-reader></a-camera>
+      <a-assets id="assets"></a-assets>
+      <a-camera gps-camera="minDistance: 5; simulateAltitude: 0;" rotation-reader></a-camera>
     </a-scene>
 
     <script>
-      // Track GPS accuracy for the user
+      // Show GPS accuracy to help you time the placement
       window.addEventListener('gps-camera-update-position', (e) => {
-        document.getElementById('status').innerText = `Accuracy: ${e.detail.position.accuracy.toFixed(1)}m`;
+        const acc = e.detail.position.accuracy;
+        document.getElementById('gps-status').innerText = `GPS Accuracy: ${acc.toFixed(1)}m`;
+        document.getElementById('gps-status').style.color = acc < 15 ? "#0f0" : "#f00";
       });
 
-      function loadModel() {
-        const url = document.getElementById('glbUrl').value;
+      function deployModel() {
+        const file = document.getElementById('fileInput').files[0];
         const lat = document.getElementById('lat').value;
         const lon = document.getElementById('lon').value;
         const scene = document.querySelector('a-scene');
-        const assets = document.querySelector('#assets-list');
 
-        if(!url || !lat || !lon) return alert("Fill all fields!");
+        if (!file || !lat || !lon) return alert("Missing file or coordinates!");
 
-        // 1. Setup Asset
-        const assetId = "user-model";
-        let asset = document.getElementById(assetId);
-        if (asset) asset.remove();
+        // Convert local file to a URL
+        const modelUrl = URL.createObjectURL(file);
         
-        asset = document.createElement('a-asset-item');
-        asset.setAttribute('id', assetId);
-        asset.setAttribute('src', url);
-        assets.appendChild(asset);
+        // Cleanup old model
+        const oldModel = document.querySelector('#tower');
+        if (oldModel) oldModel.remove();
 
-        // 2. Setup Entity
-        let model = document.querySelector('#tower-entity');
-        if (model) model.remove();
-
-        model = document.createElement('a-entity');
-        model.setAttribute('id', 'tower-entity');
-        model.setAttribute('gltf-model', `#${assetId}`);
+        const model = document.createElement('a-entity');
+        model.setAttribute('id', 'tower');
+        model.setAttribute('gltf-model', `url(${modelUrl})`);
         
-        // Scale/Position: Ensure it's 70m tall. 
-        // If your original model is 1m tall, scale="70 70 70"
-        model.setAttribute('scale', '1 1 1'); 
+        // Scale to 70m (Assumes your original model is 1m tall)
+        model.setAttribute('scale', '70 70 70');
         
-        // Anchor to GPS
+        // Initial GPS Placement
         model.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lon};`);
         
         scene.appendChild(model);
+
+        // STABILITY HACK: After 2 seconds, stop listening to GPS updates
+        // This prevents the "jumping" while you move the camera.
+        setTimeout(() => {
+          model.removeAttribute('gps-entity-place');
+          console.log("Position locked for stability.");
+        }, 2000);
       }
     </script>
   </body>
