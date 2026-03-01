@@ -1,52 +1,60 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>15m Statue - Persistent World Anchor</title>
+    <title>15m Statue AR Feed</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     <style>
+        body { margin: 0; overflow: hidden; font-family: sans-serif; }
         #ui {
-            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 1000; background: rgba(0,0,0,0.85); color: white;
-            padding: 20px; border-radius: 15px; font-family: sans-serif; 
-            text-align: center; width: 320px; border: 2px solid #fbbf24;
+            position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; background: rgba(0,0,0,0.8); color: white;
+            padding: 15px; border-radius: 12px; width: 90%; max-width: 350px;
         }
-        .controls { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
-        input[type="file"] { font-size: 12px; }
+        .control-group { margin: 10px 0; display: flex; align-items: center; gap: 10px; }
+        .control-group label { font-size: 10px; width: 60px; color: #fbbf24; font-weight: bold; }
+        input[type="range"] { flex: 1; accent-color: #fbbf24; }
+        input[type="file"] { font-size: 11px; margin-bottom: 10px; }
         button {
-            padding: 12px; background: #fbbf24; border: none;
-            border-radius: 8px; font-weight: bold; cursor: pointer; color: #000;
+            width: 100%; padding: 10px; background: #fbbf24; border: none;
+            border-radius: 5px; font-weight: bold; cursor: pointer;
         }
-        #status { font-weight: bold; color: #fbbf24; margin-bottom: 5px; }
+        #status { font-size: 12px; text-align: center; margin-bottom: 8px; }
     </style>
 </head>
 
-<body style="margin: 0; overflow: hidden;">
+<body>
 
     <div id="ui">
-        <div id="status">1. UPLOAD YOUR .GLB</div>
-        <div class="controls">
-            <input type="file" id="fileInput" accept=".glb">
-            <div id="marker-tip" style="display:none; font-size: 12px; opacity: 0.8;">
-                2. Point camera at Hiro Marker to drop the statue base there.
+        <div id="status">STEP 1: UPLOAD .GLB MODEL</div>
+        <input type="file" id="fileInput" accept=".glb">
+        
+        <div id="adjustments" style="display:none;">
+            <div class="control-group">
+                <label>ROTATION</label>
+                <input type="range" id="rotSlider" min="0" max="360" value="0">
             </div>
-            <button id="resetBtn" style="display:none;" onclick="resetPosition()">RESET ANCHOR</button>
+            <div class="control-group">
+                <label>HEIGHT (Y)</label>
+                <input type="range" id="heightSlider" min="-5" max="20" step="0.1" value="0">
+            </div>
+            <button onclick="resetAnchor()">RESET ANCHOR</button>
         </div>
     </div>
 
-    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;">
+    <a-scene 
+        embedded 
+        vr-mode-ui="enabled: false" 
+        arjs="sourceType: webcam; debugUIEnabled: false; videoTexture: true;">
         
-        <a-assets id="assets-list"></a-assets>
+        <a-assets id="assets"></a-assets>
 
         <a-marker preset="hiro" id="hiro-marker">
-            <a-ring color="#fbbf24" rotation="-90 0 0" radius-inner="0.5" radius-outer="0.6"></a-ring>
+            <a-ring color="#fbbf24" rotation="-90 0 0" radius-inner="0.4" radius-outer="0.5"></a-ring>
         </a-marker>
 
-        <a-entity id="anchor-group" visible="false">
-            <a-entity id="statue-model" 
-                      scale="15 15 15" 
-                      position="0 0 0">
-            </a-entity>
+        <a-entity id="world-anchor" visible="false">
+            <a-entity id="statue-node" scale="15 15 15" position="0 0 0"></a-entity>
         </a-entity>
 
         <a-entity camera></a-entity>
@@ -54,58 +62,59 @@
 
     <script>
         const fileInput = document.getElementById('fileInput');
-        const statueModel = document.getElementById('statue-model');
-        const anchorGroup = document.getElementById('anchor-group');
+        const statueNode = document.getElementById('statue-node');
+        const worldAnchor = document.getElementById('world-anchor');
         const hiroMarker = document.getElementById('hiro-marker');
         const status = document.getElementById('status');
-        const markerTip = document.getElementById('marker-tip');
-        const resetBtn = document.getElementById('resetBtn');
+        const adjustments = document.getElementById('adjustments');
 
-        let isAnchored = false;
+        let anchored = false;
 
-        // ─── 1. HANDLE FILE UPLOAD ───
-        fileInput.addEventListener('change', function(e) {
+        // 1. Upload logic
+        fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
-
             const url = URL.createObjectURL(file);
-            statueModel.setAttribute('gltf-model', url);
+            statueNode.setAttribute('gltf-model', url);
             
-            status.innerText = "MODEL LOADED";
+            status.innerText = "MODEL READY: SCAN HIRO MARKER";
             fileInput.style.display = "none";
-            markerTip.style.display = "block";
-            resetBtn.style.display = "block";
+            adjustments.style.display = "block";
         });
 
-        // ─── 2. WORLD ANCHOR LOGIC ───
-        // This runs every frame. If the marker is seen, we update the statue's 
-        // position to match the marker's current world position.
-        // Once anchored, we stop updating so it "stays" in that spot.
+        // 2. The "World Lock" Hand-off
         hiroMarker.addEventListener('markerFound', () => {
-            if (!isAnchored && statueModel.hasAttribute('gltf-model')) {
-                // Get marker's current world position/rotation
+            if (!anchored && statueNode.hasAttribute('gltf-model')) {
                 const worldPos = new THREE.Vector3();
                 hiroMarker.object3D.getWorldPosition(worldPos);
                 
                 const worldQuat = new THREE.Quaternion();
                 hiroMarker.object3D.getWorldQuaternion(worldQuat);
 
-                // Apply to our statue group
-                anchorGroup.object3D.position.copy(worldPos);
-                anchorGroup.object3D.quaternion.copy(worldQuat);
+                worldAnchor.object3D.position.copy(worldPos);
+                worldAnchor.object3D.quaternion.copy(worldQuat);
                 
-                anchorGroup.setAttribute('visible', 'true');
-                isAnchored = true;
-                status.innerText = "STATUE ANCHORED";
-                markerTip.innerText = "Statue is now locked to this spot. You can move the marker away.";
+                worldAnchor.setAttribute('visible', 'true');
+                anchored = true;
+                status.innerText = "STATUE ANCHORED TO CAMERA FEED";
             }
         });
 
-        function resetPosition() {
-            isAnchored = false;
-            anchorGroup.setAttribute('visible', 'false');
-            status.innerText = "SCANNING FOR HIRO...";
-            markerTip.innerText = "Point camera at Hiro Marker to drop the statue.";
+        // 3. Real-time Sliders
+        document.getElementById('rotSlider').addEventListener('input', (e) => {
+            statueNode.setAttribute('rotation', `0 ${e.target.value} 0`);
+        });
+
+        document.getElementById('heightSlider').addEventListener('input', (e) => {
+            const pos = statueNode.getAttribute('position');
+            pos.y = parseFloat(e.target.value);
+            statueNode.setAttribute('position', pos);
+        });
+
+        function resetAnchor() {
+            anchored = false;
+            worldAnchor.setAttribute('visible', 'false');
+            status.innerText = "SCAN HIRO MARKER";
         }
     </script>
 </body>
