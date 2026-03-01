@@ -1,11 +1,33 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>AR.js Golden Tower</title>
+    <title>Manual GPS Golden Tower</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+    <style>
+      .interface {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 999;
+        background: rgba(255, 255, 255, 0.8);
+        padding: 10px;
+        border-radius: 8px;
+        font-family: sans-serif;
+      }
+      input { width: 120px; margin-bottom: 5px; display: block; }
+      button { width: 100%; cursor: pointer; background: #ffd700; border: 1px solid #aa8800; font-weight: bold; }
+    </style>
   </head>
   <body style="margin: 0; overflow: hidden;">
+    
+    <div class="interface">
+      <input type="number" id="lat" placeholder="Target Latitude" step="0.000001">
+      <input type="number" id="lon" placeholder="Target Longitude" step="0.000001">
+      <button onclick="spawnTower()">Place 70m Tower</button>
+      <p style="font-size: 10px; margin-top: 5px;">Note: Must be on HTTPS to work.</p>
+    </div>
+
     <a-scene
       vr-mode-ui="enabled: false"
       embedded
@@ -15,28 +37,38 @@
     </a-scene>
 
     <script>
-      window.onload = () => {
-        navigator.geolocation.getCurrentPosition((position) => {
-          const scene = document.querySelector('a-scene');
-          const lat = position.coords.latitude;
-          const lon = position.coords.longitude;
+      function spawnTower() {
+        const lat = document.getElementById('lat').value;
+        const lon = document.getElementById('lon').value;
 
-          // Create the Golden Tower
-          const tower = document.createElement('a-cylinder');
-          tower.setAttribute('material', 'color: #FFD700; metalness: 0.8; roughness: 0.2');
-          tower.setAttribute('height', '70');
-          tower.setAttribute('radius', '2');
-          
-          // Place it 20m North of current position 
-          // (Roughly 0.00018 degrees lat change = 20m)
-          tower.setAttribute('gps-entity-place', `latitude: ${lat + 0.00018}; longitude: ${lon};`);
-          
-          // Elevate so the base is at ground level (height/2)
-          tower.setAttribute('position', '0 35 0');
+        if (!lat || !lon) {
+          alert("Please enter both coordinates!");
+          return;
+        }
 
-          scene.appendChild(tower);
-        });
-      };
+        const scene = document.querySelector('a-scene');
+        
+        // Remove existing tower if user wants to move it
+        const oldTower = document.querySelector('#golden-tower');
+        if (oldTower) scene.removeChild(oldTower);
+
+        const tower = document.createElement('a-cylinder');
+        tower.setAttribute('id', 'golden-tower');
+        
+        // Visuals: 70m height, 4m diameter (radius 2)
+        tower.setAttribute('height', '70');
+        tower.setAttribute('radius', '2');
+        tower.setAttribute('material', 'color: #FFD700; metalness: 0.9; roughness: 0.1');
+        
+        // GPS Placement
+        tower.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lon};`);
+        
+        // Position Y at 35 so the 70m tall cylinder sits on the ground
+        tower.setAttribute('position', '0 35 0');
+        
+        scene.appendChild(tower);
+        alert("Tower placed at " + lat + ", " + lon);
+      }
     </script>
   </body>
 </html>
