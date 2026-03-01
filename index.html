@@ -75,69 +75,54 @@
 </a-scene>
 
 <script>
-// ── GPS smoothing ────────────────────────────────────────────────────────────
-// Exponential moving average keeps the placed coordinate stable.
-const ALPHA = 0.2;          // lower = smoother but slower to settle
-let smoothLat = null, smoothLng = null;
-let watchId   = null;
-let deployed  = false;
+let deployed = false;
 
-function smoothGPS(lat, lng) {
-    if (smoothLat === null) { smoothLat = lat; smoothLng = lng; return; }
-    smoothLat = ALPHA * lat + (1 - ALPHA) * smoothLat;
-    smoothLng = ALPHA * lng + (1 - ALPHA) * smoothLng;
-}
-
-// ── AR init ──────────────────────────────────────────────────────────────────
 function startAR() {
     document.getElementById('overlay').style.display = 'none';
-    document.getElementById('hud').style.display     = 'block';
+    document.getElementById('hud').style.display = 'block';
 
-    watchId = navigator.geolocation.watchPosition(
-        pos => {
-            const { latitude: lat, longitude: lng, accuracy } = pos.coords;
-            smoothGPS(lat, lng);
-            document.getElementById('debug').textContent =
-                `GPS: ${smoothLat.toFixed(5)}, ${smoothLng.toFixed(5)}  ±${Math.round(accuracy)}m`;
-            document.getElementById('dropBtn').disabled = false;
-        },
-        err => {
-            document.getElementById('debug').textContent = 'GPS error: ' + err.message;
-        },
-        { enableHighAccuracy: true, maximumAge: 0 }
-    );
+    // We wait for the first valid GPS fix from the component itself
+    window.addEventListener('gps-camera-update-position', (e) => {
+        const { latitude, longitude } = e.detail.position;
+        document.getElementById('debug').textContent = 
+            `GPS Fixed: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+        document.getElementById('dropBtn').disabled = false;
+    }, { once: false });
 }
 
-// ── Tower placement ───────────────────────────────────────────────────────────
 function dropTower() {
-    if (smoothLat === null) return;
+    const cam = document.querySelector('[gps-camera]');
+    const currLat = cam.components['gps-camera'].currentCoords.latitude;
+    const currLng = cam.components['gps-camera'].currentCoords.longitude;
+
     if (deployed) {
-        // Remove previous tower
         const old = document.getElementById('tower-anchor');
-        if (old) old.parentNode.removeChild(old);
+        if (old) old.remove();
     }
     deployed = true;
 
-    // Offset 20 m north so the tower is in front of you, not around you
-    // 1 degree latitude ≈ 111 320 m  →  20 m ≈ 0.00018 deg
-    const lat = smoothLat + 0.00018;
-    const lng = smoothLng;
+    // 0.0002 degrees is roughly 20-22 meters North
+    const targetLat = currLat + 0.0002; 
+    const targetLng = currLng;
 
     const anchor = document.createElement('a-entity');
-    anchor.id = 'tower-anchor';
-    anchor.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lng};`);
+    anchor.setAttribute('id', 'tower-anchor');
+    // Key change: Use the exact component naming and ensure it's a string
+    anchor.setAttribute('gps-entity-place', {
+        latitude: targetLat,
+        longitude: targetLng
+    });
 
-    // ── Zeus GLB model (30 m tall) ────────────────────────
     const model = document.createElement('a-entity');
     model.setAttribute('gltf-model', '#zeus-model');
-    model.setAttribute('scale',      '30 30 30');
-    model.setAttribute('position',   '0 0 0');
-
+    // Note: If your GLB is already 1m tall, 30 30 30 makes it 30m. 
+    // If it's jittering, try reducing scale to 1 1 1 first to test.
+    model.setAttribute('scale', '30 30 30'); 
+    
     anchor.appendChild(model);
-    document.getElementById('scene').appendChild(anchor);
+    document.querySelector('a-scene').appendChild(anchor);
 
-    document.getElementById('debug').textContent =
-        `Tower placed at ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    document.getElementById('debug').textContent = "Tower Anchored Static";
 }
 </script>
 
