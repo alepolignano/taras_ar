@@ -1,50 +1,52 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>15m Statue - Custom Upload</title>
+    <title>15m Statue - Persistent World Anchor</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     <style>
         #ui {
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 1000; background: rgba(0,0,0,0.9); color: white;
-            padding: 15px; border-radius: 12px; font-family: sans-serif; 
-            text-align: center; width: 300px; border: 1px solid #fbbf24;
+            z-index: 1000; background: rgba(0,0,0,0.85); color: white;
+            padding: 20px; border-radius: 15px; font-family: sans-serif; 
+            text-align: center; width: 320px; border: 2px solid #fbbf24;
         }
-        #status { font-size: 14px; margin-bottom: 10px; font-weight: bold; }
-        .controls { display: flex; flex-direction: column; gap: 8px; }
-        input[type="file"] { font-size: 12px; color: #ccc; }
+        .controls { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+        input[type="file"] { font-size: 12px; }
         button {
-            padding: 10px; background: #fbbf24; border: none;
-            border-radius: 5px; font-weight: bold; cursor: pointer;
+            padding: 12px; background: #fbbf24; border: none;
+            border-radius: 8px; font-weight: bold; cursor: pointer; color: #000;
         }
-        #recenterBtn { background: #444; color: white; }
+        #status { font-weight: bold; color: #fbbf24; margin-bottom: 5px; }
     </style>
 </head>
 
 <body style="margin: 0; overflow: hidden;">
 
     <div id="ui">
-        <div id="status">1. Upload GLB Model</div>
+        <div id="status">1. UPLOAD YOUR .GLB</div>
         <div class="controls">
             <input type="file" id="fileInput" accept=".glb">
-            <div id="step2" style="display:none;">
-                <p style="font-size: 11px; margin: 5px 0;">2. Show Hiro Marker to Place</p>
-                <button id="recenterBtn" onclick="resetStatue()">RE-LOCK POSITION</button>
+            <div id="marker-tip" style="display:none; font-size: 12px; opacity: 0.8;">
+                2. Point camera at Hiro Marker to drop the statue base there.
             </div>
+            <button id="resetBtn" style="display:none;" onclick="resetPosition()">RESET ANCHOR</button>
         </div>
     </div>
 
-    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
+    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;">
         
         <a-assets id="assets-list"></a-assets>
 
-        <a-marker preset="hiro" id="marker">
-            <a-box opacity="0.4" color="#fbbf24" scale="0.5 0.5 0.5"></a-box>
+        <a-marker preset="hiro" id="hiro-marker">
+            <a-ring color="#fbbf24" rotation="-90 0 0" radius-inner="0.5" radius-outer="0.6"></a-ring>
         </a-marker>
 
-        <a-entity id="world-statue" visible="false">
-            <a-entity id="model-container" scale="15 15 15"></a-entity>
+        <a-entity id="anchor-group" visible="false">
+            <a-entity id="statue-model" 
+                      scale="15 15 15" 
+                      position="0 0 0">
+            </a-entity>
         </a-entity>
 
         <a-entity camera></a-entity>
@@ -52,59 +54,58 @@
 
     <script>
         const fileInput = document.getElementById('fileInput');
-        const modelContainer = document.getElementById('model-container');
-        const statue = document.querySelector('#world-statue');
-        const marker = document.querySelector('#marker');
+        const statueModel = document.getElementById('statue-model');
+        const anchorGroup = document.getElementById('anchor-group');
+        const hiroMarker = document.getElementById('hiro-marker');
         const status = document.getElementById('status');
-        const step2 = document.getElementById('step2');
-        
-        let locked = false;
+        const markerTip = document.getElementById('marker-tip');
+        const resetBtn = document.getElementById('resetBtn');
 
-        // ─── FILE UPLOAD LOGIC ───
+        let isAnchored = false;
+
+        // ─── 1. HANDLE FILE UPLOAD ───
         fileInput.addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
 
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                const contents = event.target.result;
-                const blob = new Blob([contents], {type: 'model/gltf-binary'});
-                const url = URL.createObjectURL(blob);
-
-                // Set the model to the container
-                modelContainer.setAttribute('gltf-model', url);
-                
-                status.innerText = "Model Loaded!";
-                status.style.color = "#fbbf24";
-                step2.style.display = "block";
-                fileInput.style.display = "none";
-            };
-            reader.readAsArrayBuffer(file);
+            const url = URL.createObjectURL(file);
+            statueModel.setAttribute('gltf-model', url);
+            
+            status.innerText = "MODEL LOADED";
+            fileInput.style.display = "none";
+            markerTip.style.display = "block";
+            resetBtn.style.display = "block";
         });
 
-        // ─── WORLD LOCK LOGIC ───
-        // Uses the 3D position of the marker to "drop" the model in global space
-        marker.addEventListener('markerFound', () => {
-            if (!locked && modelContainer.hasAttribute('gltf-model')) {
+        // ─── 2. WORLD ANCHOR LOGIC ───
+        // This runs every frame. If the marker is seen, we update the statue's 
+        // position to match the marker's current world position.
+        // Once anchored, we stop updating so it "stays" in that spot.
+        hiroMarker.addEventListener('markerFound', () => {
+            if (!isAnchored && statueModel.hasAttribute('gltf-model')) {
+                // Get marker's current world position/rotation
                 const worldPos = new THREE.Vector3();
-                marker.object3D.getWorldPosition(worldPos);
+                hiroMarker.object3D.getWorldPosition(worldPos);
                 
                 const worldQuat = new THREE.Quaternion();
-                marker.object3D.getWorldQuaternion(worldQuat);
+                hiroMarker.object3D.getWorldQuaternion(worldQuat);
 
-                statue.object3D.position.copy(worldPos);
-                statue.object3D.quaternion.copy(worldQuat);
+                // Apply to our statue group
+                anchorGroup.object3D.position.copy(worldPos);
+                anchorGroup.object3D.quaternion.copy(worldQuat);
                 
-                statue.setAttribute('visible', 'true');
-                locked = true;
-                status.innerText = "Statue Locked in World";
+                anchorGroup.setAttribute('visible', 'true');
+                isAnchored = true;
+                status.innerText = "STATUE ANCHORED";
+                markerTip.innerText = "Statue is now locked to this spot. You can move the marker away.";
             }
         });
 
-        function resetStatue() {
-            locked = false;
-            statue.setAttribute('visible', 'false');
-            status.innerText = "Scanning for Marker...";
+        function resetPosition() {
+            isAnchored = false;
+            anchorGroup.setAttribute('visible', 'false');
+            status.innerText = "SCANNING FOR HIRO...";
+            markerTip.innerText = "Point camera at Hiro Marker to drop the statue.";
         }
     </script>
 </body>
