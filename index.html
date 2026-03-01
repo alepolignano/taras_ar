@@ -1,85 +1,42 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <meta charset="utf-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <title>Geo-AR Auto-Anchor</title>
+  <head>
+    <title>AR.js Golden Tower</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.5/aframe/build/aframe-ar-location-only.js"></script>
-    <style>
-        .ui-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); z-index: 999;
-            display: flex; align-items: center; justify-content: center;
-        }
-        button {
-            padding: 20px 40px; font-size: 1.2rem; border-radius: 50px;
-            border: none; background: gold; cursor: pointer; font-weight: bold;
-        }
-    </style>
-</head>
-
-<body style="margin: 0; overflow: hidden;">
-    <div id="overlay" class="ui-overlay">
-        <button onclick="startAR()">START AR EXPERIENCE</button>
-    </div>
-
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+  </head>
+  <body style="margin: 0; overflow: hidden;">
     <a-scene
-        vr-mode-ui="enabled: false"
-        embedded
-        arjs="sourceType: webcam; debugUIEnabled: false;"
+      vr-mode-ui="enabled: false"
+      embedded
+      arjs="sourceType: webcam; debugUIEnabled: false;"
     >
-        <a-entity
-            id="tower"
-            visible="false"
-            geometry="primitive: cylinder; height: 10; radius: 2"
-            material="color: gold; metalness: 0.8; roughness: 0.2"
-            scale="1 1 1"
-        >
-            <a-text
-                value="GOLDEN TOWER"
-                align="center"
-                position="0 6 0"
-                scale="5 5 5"
-            ></a-text>
-        </a-entity>
-
-        <a-camera 
-            id="camera"
-            gps-camera="simulateAltitude: 1.6; gpsMinDistance: 1;" 
-            rotation-reader
-        >
-        </a-camera>
+      <a-camera gps-camera rotation-reader></a-camera>
     </a-scene>
 
     <script>
-        function startAR() {
-            // Hide the overlay
-            document.getElementById('overlay').style.display = 'none';
+      window.onload = () => {
+        navigator.geolocation.getCurrentPosition((position) => {
+          const scene = document.querySelector('a-scene');
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
 
-            // 1. Request GPS Position
-            navigator.geolocation.getCurrentPosition((position) => {
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
+          // Create the Golden Tower
+          const tower = document.createElement('a-cylinder');
+          tower.setAttribute('material', 'color: #FFD700; metalness: 0.8; roughness: 0.2');
+          tower.setAttribute('height', '70');
+          tower.setAttribute('radius', '2');
+          
+          // Place it 20m North of current position 
+          // (Roughly 0.00018 degrees lat change = 20m)
+          tower.setAttribute('gps-entity-place', `latitude: ${lat + 0.00018}; longitude: ${lon};`);
+          
+          // Elevate so the base is at ground level (height/2)
+          tower.setAttribute('position', '0 35 0');
 
-                // 2. Calculate a point 10 meters North (approx +0.0001 to latitude)
-                // This ensures the tower isn't "inside" you when it spawns
-                const targetLat = lat + 0.0001; 
-                const targetLon = lon;
-
-                const tower = document.getElementById('tower');
-                
-                // 3. Set the AR location and make it visible
-                tower.setAttribute('gps-entity-place', `latitude: ${targetLat}; longitude: ${targetLon};`);
-                tower.setAttribute('visible', 'true');
-
-                console.log(`Tower anchored at: ${targetLat}, ${targetLon}`);
-            }, (err) => {
-                alert("Please enable GPS/Location access to see the tower.");
-                console.error(err);
-            }, { enableHighAccuracy: true });
-        }
+          scene.appendChild(tower);
+        });
+      };
     </script>
-    
-</body>
+  </body>
 </html>
