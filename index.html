@@ -3,54 +3,66 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tower AR</title>
+    <title>Tower AR - Adjustable Offset</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/three.js/build/ar-threex-location-only.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { overflow: hidden; font-family: sans-serif; }
+        body { overflow: hidden; font-family: sans-serif; background: #000; }
 
         #overlay {
-            position: fixed; inset: 0;
-            background: #111; z-index: 999;
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            color: #fff; text-align: center; padding: 20px;
+            position: fixed; inset: 0; background: #111; z-index: 999;
+            display: flex; flex-direction: column; align-items: center; 
+            justify-content: center; color: #fff; text-align: center; padding: 20px;
         }
-        #overlay h2 { font-size: 1.4rem; margin-bottom: 12px; }
-        #overlay p  { font-size: 0.9rem; opacity: 0.7; margin-bottom: 24px; }
 
         #hud {
-            position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
-            z-index: 100; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);
-            padding: 12px 16px; border-radius: 14px;
-            color: #fff; font-size: 12px; width: 90%; max-width: 380px;
-            display: none;
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 100; background: rgba(0,0,0,0.85); backdrop-filter: blur(10px);
+            padding: 16px; border-radius: 16px; color: #fff; 
+            width: 90%; max-width: 400px; display: none; border: 1px solid rgba(255,255,255,0.1);
         }
-        #hud #debug { margin-bottom: 8px; opacity: 0.8; }
 
+        .control-row { margin: 12px 0; display: flex; align-items: center; gap: 10px; }
+        .control-row label { width: 60px; font-size: 10px; font-weight: bold; color: #fbbf24; }
+        input[type=range] { flex: 1; accent-color: #fbbf24; }
+
+        .btn-group { display: flex; gap: 8px; margin-top: 10px; }
         button {
-            width: 100%; padding: 13px; background: #fbbf24;
-            border: none; font-weight: 700; border-radius: 8px;
-            margin: 4px 0; cursor: pointer; font-size: 14px;
+            flex: 1; padding: 12px; background: #fbbf24; border: none;
+            font-weight: 700; border-radius: 8px; cursor: pointer; font-size: 13px;
         }
-        button:disabled { opacity: 0.4; cursor: default; }
+        #recalBtn { background: #444; color: #fff; }
+        button:disabled { opacity: 0.3; }
 
-        .a-enter-vr, .a-orientation-modal { display: none !important; }
+        #debug { font-size: 10px; opacity: 0.6; font-family: monospace; margin-bottom: 8px; }
     </style>
 </head>
 <body>
 
 <div id="overlay">
-    <h2>30m Golden Tower AR</h2>
-    <p>Point your camera at the ground ahead,<br>then tap Start.</p>
-    <button id="startBtn" onclick="startAR()">START</button>
+    <h2>30m Golden Tower</h2>
+    <p>Calibrating GPS...</p>
+    <button onclick="startAR()">START AR</button>
 </div>
 
 <div id="hud">
-    <div id="debug">GPS: searching…</div>
-    <button id="dropBtn" onclick="dropTower()" disabled>DROP TOWER HERE</button>
+    <div id="debug">Waiting for GPS...</div>
+    
+    <div class="control-row">
+        <label>NORTH/SOUTH</label>
+        <input type="range" id="latOff" min="-0.001" max="0.001" step="0.000005" value="0.00020">
+    </div>
+    <div class="control-row">
+        <label>EAST/WEST</label>
+        <input type="range" id="lngOff" min="-0.001" max="0.001" step="0.000005" value="0">
+    </div>
+
+    <div class="btn-group">
+        <button id="dropBtn" onclick="dropTower()" disabled>DROP TOWER</button>
+        <button id="recalBtn" onclick="recalibrate()">RECALIBRATE</button>
+    </div>
 </div>
 
 <a-scene
@@ -62,67 +74,75 @@
         <a-asset-item id="zeus-model" src="zeus.glb"></a-asset-item>
     </a-assets>
 
-    <!-- gpsMinDistance: don't reposition camera more than once per 3 m move
-         positionMinAccuracy: ignore fixes worse than 100 m -->
-    <a-camera
-        id="cam"
-        gps-camera="gpsMinDistance: 3; positionMinAccuracy: 100;"
-        rotation-reader>
-    </a-camera>
+    <a-camera id="cam" gps-camera="gpsMinDistance: 2; positionMinAccuracy: 50;" rotation-reader></a-camera>
 
-    <a-light type="ambient"     intensity="1.5"></a-light>
+    <a-light type="ambient" intensity="1.5"></a-light>
     <a-light type="directional" position="1 10 1" intensity="1.2"></a-light>
 </a-scene>
 
 <script>
+let baseLat = null, baseLng = null;
 let deployed = false;
 
 function startAR() {
     document.getElementById('overlay').style.display = 'none';
     document.getElementById('hud').style.display = 'block';
 
-    // We wait for the first valid GPS fix from the component itself
     window.addEventListener('gps-camera-update-position', (e) => {
-        const { latitude, longitude } = e.detail.position;
-        document.getElementById('debug').textContent = 
-            `GPS Fixed: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+        const p = e.detail.position;
+        document.getElementById('debug').textContent = `GPS: ${p.latitude.toFixed(6)}, ${p.longitude.toFixed(6)}`;
         document.getElementById('dropBtn').disabled = false;
-    }, { once: false });
+    });
+
+    document.getElementById('latOff').addEventListener('input', updatePosition);
+    document.getElementById('lngOff').addEventListener('input', updatePosition);
+}
+
+function recalibrate() {
+    const camComp = document.querySelector('[gps-camera]').components['gps-camera'];
+    camComp.update();
+    alert("Compass reset. Face North and move slightly to sync.");
 }
 
 function dropTower() {
-    const cam = document.querySelector('[gps-camera]');
-    const currLat = cam.components['gps-camera'].currentCoords.latitude;
-    const currLng = cam.components['gps-camera'].currentCoords.longitude;
+    const camComp = document.querySelector('[gps-camera]').components['gps-camera'];
+    if(!camComp.currentCoords) return;
+
+    // We capture where YOU are standing right now as the anchor point
+    baseLat = camComp.currentCoords.latitude;
+    baseLng = camComp.currentCoords.longitude;
 
     if (deployed) {
         const old = document.getElementById('tower-anchor');
         if (old) old.remove();
     }
-    deployed = true;
-
-    // 0.0002 degrees is roughly 20-22 meters North
-    const targetLat = currLat + 0.0002; 
-    const targetLng = currLng;
-
+    
     const anchor = document.createElement('a-entity');
     anchor.setAttribute('id', 'tower-anchor');
-    // Key change: Use the exact component naming and ensure it's a string
-    anchor.setAttribute('gps-entity-place', {
-        latitude: targetLat,
-        longitude: targetLng
-    });
 
     const model = document.createElement('a-entity');
     model.setAttribute('gltf-model', '#zeus-model');
-    // Note: If your GLB is already 1m tall, 30 30 30 makes it 30m. 
-    // If it's jittering, try reducing scale to 1 1 1 first to test.
-    model.setAttribute('scale', '30 30 30'); 
+    model.setAttribute('scale', '30 30 30');
     
     anchor.appendChild(model);
-    document.querySelector('a-scene').appendChild(anchor);
+    document.getElementById('scene').appendChild(anchor);
+    
+    deployed = true;
+    updatePosition(); // Immediately applies the 0.0002 slider value
+}
 
-    document.getElementById('debug').textContent = "Tower Anchored Static";
+function updatePosition() {
+    if (!deployed || baseLat === null) return;
+
+    const latShift = parseFloat(document.getElementById('latOff').value);
+    const lngShift = parseFloat(document.getElementById('lngOff').value);
+
+    const anchor = document.getElementById('tower-anchor');
+    // Set the GPS coords to your original position + whatever the slider says
+    anchor.setAttribute('gps-entity-place', {
+        latitude: baseLat + latShift,
+        longitude: baseLng + lngShift
+    });
 }
 </script>
 
