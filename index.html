@@ -1,31 +1,25 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Manual GPS Golden Tower</title>
+    <title>Stable 70m Tower</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
       .interface {
-        position: fixed;
-        top: 10px;
-        left: 10px;
-        z-index: 999;
-        background: rgba(255, 255, 255, 0.8);
-        padding: 10px;
-        border-radius: 8px;
-        font-family: sans-serif;
+        position: fixed; top: 10px; left: 10px; z-index: 999;
+        background: rgba(0, 0, 0, 0.7); color: white; padding: 15px;
+        border-radius: 8px; font-family: sans-serif;
       }
-      input { width: 120px; margin-bottom: 5px; display: block; }
-      button { width: 100%; cursor: pointer; background: #ffd700; border: 1px solid #aa8800; font-weight: bold; }
+      input { width: 140px; margin-bottom: 8px; display: block; padding: 5px; }
+      button { width: 100%; padding: 10px; background: #ffd700; border: none; font-weight: bold; cursor: pointer; }
     </style>
   </head>
   <body style="margin: 0; overflow: hidden;">
     
     <div class="interface">
-      <input type="number" id="lat" placeholder="Target Latitude" step="0.000001">
-      <input type="number" id="lon" placeholder="Target Longitude" step="0.000001">
-      <button onclick="spawnTower()">Place 70m Tower</button>
-      <p style="font-size: 10px; margin-top: 5px;">Note: Must be on HTTPS to work.</p>
+      <input type="number" id="lat" placeholder="Latitude (e.g. 40.7)" step="0.000001">
+      <input type="number" id="lon" placeholder="Longitude (e.g. -74.0)" step="0.000001">
+      <button onclick="spawnTower()">Lock 70m Tower</button>
     </div>
 
     <a-scene
@@ -33,41 +27,35 @@
       embedded
       arjs="sourceType: webcam; debugUIEnabled: false;"
     >
-      <a-camera gps-camera rotation-reader></a-camera>
+      <a-camera 
+        gps-camera="simulateAltitude: 0; minDistance: 1; gpsMinDistance: 1;" 
+        rotation-reader>
+      </a-camera>
     </a-scene>
 
     <script>
       function spawnTower() {
         const lat = document.getElementById('lat').value;
         const lon = document.getElementById('lon').value;
-
-        if (!lat || !lon) {
-          alert("Please enter both coordinates!");
-          return;
-        }
-
         const scene = document.querySelector('a-scene');
-        
-        // Remove existing tower if user wants to move it
-        const oldTower = document.querySelector('#golden-tower');
-        if (oldTower) scene.removeChild(oldTower);
+
+        // Clean up previous towers
+        const existing = document.getElementById('tower');
+        if (existing) scene.removeChild(existing);
 
         const tower = document.createElement('a-cylinder');
-        tower.setAttribute('id', 'golden-tower');
-        
-        // Visuals: 70m height, 4m diameter (radius 2)
+        tower.setAttribute('id', 'tower');
         tower.setAttribute('height', '70');
-        tower.setAttribute('radius', '2');
-        tower.setAttribute('material', 'color: #FFD700; metalness: 0.9; roughness: 0.1');
+        tower.setAttribute('radius', '3');
+        tower.setAttribute('material', 'color: #FFD700; metalness: 0.9; roughness: 0.1; side: double');
         
-        // GPS Placement
+        // Use the GPS coordinates
         tower.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lon};`);
         
-        // Position Y at 35 so the 70m tall cylinder sits on the ground
+        // Shift Y to 35 so base stays at 0 (ground level)
         tower.setAttribute('position', '0 35 0');
         
         scene.appendChild(tower);
-        alert("Tower placed at " + lat + ", " + lon);
       }
     </script>
   </body>
