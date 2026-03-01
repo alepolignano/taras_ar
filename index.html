@@ -40,7 +40,7 @@
         <a-assets id="assets-list"></a-assets>
 
         <a-marker preset="hiro" id="hiro-marker">
-            <a-box position="0 0.1 0" scale="0.2 0.2 0.2" color="yellow"></a-box>
+            <a-ring color="#fbbf24" rotation="-90 0 0" radius-inner="0.4" radius-outer="0.5"></a-ring>
         </a-marker>
 
         <a-entity id="world-anchor" visible="false">
@@ -58,43 +58,51 @@
         const worldAnchor = document.getElementById('world-anchor');
         const hiroMarker = document.getElementById('hiro-marker');
         const status = document.getElementById('status');
-        const controls = document.getElementById('controls');
-
-        let isAnchored = false;
+        
+        let markerVisible = false;
 
         // 1. Load File
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
             const url = URL.createObjectURL(file);
-            
-            // Set the model
             statueModel.setAttribute('gltf-model', url);
-            
             status.innerText = "MODEL LOADED. SCAN HIRO.";
             fileInput.style.display = "none";
-            controls.style.display = "block";
+            document.getElementById('controls').style.display = "block";
         });
 
-        // 2. Anchor Logic
-        hiroMarker.addEventListener('markerFound', () => {
-            if (!isAnchored && statueModel.hasAttribute('gltf-model')) {
-                const worldPos = new THREE.Vector3();
-                hiroMarker.object3D.getWorldPosition(worldPos);
-                
-                const worldQuat = new THREE.Quaternion();
-                hiroMarker.object3D.getWorldQuaternion(worldQuat);
+        // 2. Tracking Loop
+        // tick() runs every single frame (approx 60fps)
+        AFRAME.registerComponent('tracker', {
+            tick: function () {
+                if (hiroMarker.visible) {
+                    // While marker is seen, keep the statue locked TO the marker
+                    const worldPos = new THREE.Vector3();
+                    const worldQuat = new THREE.Quaternion();
+                    
+                    hiroMarker.object3D.getWorldPosition(worldPos);
+                    hiroMarker.object3D.getWorldQuaternion(worldQuat);
 
-                worldAnchor.object3D.position.copy(worldPos);
-                worldAnchor.object3D.quaternion.copy(worldQuat);
-                
-                worldAnchor.setAttribute('visible', 'true');
-                isAnchored = true;
-                status.innerText = "ANCHORED";
+                    worldAnchor.object3D.position.copy(worldPos);
+                    worldAnchor.object3D.quaternion.copy(worldQuat);
+                    
+                    worldAnchor.setAttribute('visible', 'true');
+                    status.innerText = "TRACKING MARKER...";
+                    status.style.color = "#00ff00";
+                } else if (worldAnchor.getAttribute('visible')) {
+                    // If marker is lost, we simply STOP updating position.
+                    // The statue stays at the LAST known world coordinates.
+                    status.innerText = "MARKER LOST: ANCHORED IN WORLD";
+                    status.style.color = "#fbbf24";
+                }
             }
         });
+        
+        // Attach the tracker to the scene
+        document.querySelector('a-scene').setAttribute('tracker', '');
 
-        // 3. UI Listeners
+        // 3. UI Listeners (Keep these as they are)
         document.getElementById('scaleSlider').addEventListener('input', (e) => {
             const s = e.target.value;
             statueModel.setAttribute('scale', `${s} ${s} ${s}`);
@@ -105,7 +113,6 @@
         });
 
         function resetAnchor() {
-            isAnchored = false;
             worldAnchor.setAttribute('visible', 'false');
             status.innerText = "SCAN HIRO.";
         }
