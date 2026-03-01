@@ -1,73 +1,83 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Locked 70m Tower</title>
+    <title>Fixed GLB Tower</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <style>
       .ui {
         position: fixed; top: 10px; left: 10px; z-index: 999;
-        background: rgba(0, 0, 0, 0.8); color: #FFD700; padding: 15px;
-        border-radius: 10px; font-family: monospace; border: 1px solid #FFD700;
+        background: rgba(0,0,0,0.8); color: gold; padding: 15px;
+        border-radius: 10px; font-family: sans-serif; border: 1px solid gold;
       }
-      input { background: #222; color: #fff; border: 1px solid #444; padding: 8px; margin: 5px 0; width: 160px; display: block; }
-      button { width: 100%; padding: 10px; background: #FFD700; color: #000; border: none; font-weight: bold; cursor: pointer; margin-top: 10px; }
+      input { display: block; margin: 5px 0; width: 180px; }
+      button { width: 100%; padding: 10px; background: gold; font-weight: bold; margin-top: 5px; cursor: pointer; border: none; }
+      .hint { font-size: 10px; color: white; margin-top: 5px; }
     </style>
   </head>
   <body style="margin: 0; overflow: hidden;">
     
     <div class="ui">
-      LAT: <input type="number" id="lat" step="0.000001" placeholder="40.7128">
-      LON: <input type="number" id="lon" step="0.000001" placeholder="-74.0060">
-      <button onclick="spawnTower()">LOCK TOWER IN PLACE</button>
-      <div id="status" style="font-size: 10px; margin-top: 10px; color: white;">Waiting for GPS...</div>
+      GLB URL: <input type="text" id="glbUrl" placeholder="https://path-to-your.glb">
+      LAT: <input type="number" id="lat" step="0.000001" placeholder="Latitude">
+      LON: <input type="number" id="lon" step="0.000001" placeholder="Longitude">
+      <button onclick="loadModel()">SPAWN MODEL</button>
+      <div class="hint">Wait for GPS accuracy < 10m for best results.</div>
+      <div id="status" style="font-size: 11px; color: #0f0;"></div>
     </div>
 
     <a-scene
       vr-mode-ui="enabled: false"
       embedded
       arjs="sourceType: webcam; debugUIEnabled: false;"
+      renderer="logarithmicDepthBuffer: true;"
     >
-      <a-camera 
-        gps-camera="gpsMinDistance: 5; simulateAltitude: 0;" 
-        rotation-reader>
-      </a-camera>
+      <a-assets id="assets-list"></a-assets>
+      
+      <a-camera gps-camera="minDistance: 10; simulateAltitude: 0;" rotation-reader></a-camera>
     </a-scene>
 
     <script>
-      // Listen for GPS updates just to show status
+      // Track GPS accuracy for the user
       window.addEventListener('gps-camera-update-position', (e) => {
-        document.getElementById('status').innerText = `Your GPS Accuracy: ${e.detail.position.accuracy.toFixed(1)}m`;
+        document.getElementById('status').innerText = `Accuracy: ${e.detail.position.accuracy.toFixed(1)}m`;
       });
 
-      function spawnTower() {
-        const lat = document.querySelector('#lat').value;
-        const lon = document.querySelector('#lon').value;
+      function loadModel() {
+        const url = document.getElementById('glbUrl').value;
+        const lat = document.getElementById('lat').value;
+        const lon = document.getElementById('lon').value;
         const scene = document.querySelector('a-scene');
+        const assets = document.querySelector('#assets-list');
 
-        // Remove old tower
-        const old = document.querySelector('#golden-tower');
-        if (old) scene.removeChild(old);
+        if(!url || !lat || !lon) return alert("Fill all fields!");
 
-        const tower = document.createElement('a-entity');
-        tower.setAttribute('id', 'golden-tower');
+        // 1. Setup Asset
+        const assetId = "user-model";
+        let asset = document.getElementById(assetId);
+        if (asset) asset.remove();
         
-        // Define the geometry and look
-        tower.innerHTML = `
-          <a-cylinder 
-            height="70" 
-            radius="3" 
-            position="0 35 0"
-            material="color: #FFD700; metalness: 0.9; roughness: 0.1; side: double">
-          </a-cylinder>
-        `;
+        asset = document.createElement('a-asset-item');
+        asset.setAttribute('id', assetId);
+        asset.setAttribute('src', url);
+        assets.appendChild(asset);
+
+        // 2. Setup Entity
+        let model = document.querySelector('#tower-entity');
+        if (model) model.remove();
+
+        model = document.createElement('a-entity');
+        model.setAttribute('id', 'tower-entity');
+        model.setAttribute('gltf-model', `#${assetId}`);
         
-        // The Magic Sauce: "gps-entity-place" tells it WHERE.
-        // We set it once. AR.js then handles the relative position.
-        tower.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lon};`);
+        // Scale/Position: Ensure it's 70m tall. 
+        // If your original model is 1m tall, scale="70 70 70"
+        model.setAttribute('scale', '1 1 1'); 
         
-        scene.appendChild(tower);
-        console.log("Tower anchored.");
+        // Anchor to GPS
+        model.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lon};`);
+        
+        scene.appendChild(model);
       }
     </script>
   </body>
