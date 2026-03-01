@@ -1,53 +1,114 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>AR Test - Red Box</title>
+    <title>GLB World Anchor - Debug Mode</title>
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; }
-        #debug-ui {
-            position: fixed; top: 10px; left: 10px; z-index: 9999;
-            background: rgba(0,0,0,0.8); color: #00ff00;
-            padding: 10px; font-family: monospace; font-size: 12px;
-            pointer-events: none; border-radius: 5px;
+        body { margin: 0; overflow: hidden; font-family: sans-serif; }
+        #ui {
+            position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; background: rgba(0,0,0,0.8); color: white;
+            padding: 15px; border-radius: 10px; width: 280px; text-align: center;
         }
+        .slider-wrap { margin: 10px 0; display: flex; align-items: center; gap: 5px; }
+        .slider-wrap label { font-size: 10px; width: 50px; color: #fbbf24; }
+        input[type="range"] { flex: 1; }
+        #status { font-size: 12px; font-weight: bold; margin-bottom: 10px; }
     </style>
 </head>
 <body style="margin: 0; overflow: hidden;">
 
-    <div id="debug-ui">
-        Status: <span id="status">Scanning for Hiro Marker...</span>
+    <div id="ui">
+        <div id="status">1. UPLOAD GLB</div>
+        <input type="file" id="fileInput" accept=".glb" style="font-size: 11px;">
+        
+        <div id="controls" style="display:none;">
+            <div class="slider-wrap">
+                <label>SCALE</label>
+                <input type="range" id="scaleSlider" min="0.1" max="20" step="0.1" value="1">
+            </div>
+            <div class="slider-wrap">
+                <label>HEIGHT</label>
+                <input type="range" id="heightSlider" min="-5" max="5" step="0.1" value="0">
+            </div>
+            <button onclick="resetAnchor()" style="width:100%; padding: 5px; background: #fbbf24; border:none; border-radius:4px; cursor:pointer;">RESET ANCHOR</button>
+        </div>
     </div>
 
-    <a-scene 
-        embedded 
-        vr-mode-ui="enabled: false"
-        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_camera;"
-        renderer="logarithmicDepthBuffer: true; colorManagement: true;">
-        
+    <a-scene embedded vr-mode-ui="enabled: false" arjs="sourceType: webcam; debugUIEnabled: false;">
+        <a-assets id="assets-list"></a-assets>
+
         <a-marker preset="hiro" id="hiro-marker">
-            <a-box position="0 0.25 0" scale="0.5 0.5 0.5" material="color: red; opacity: 0.8;"></a-box>
-            <a-text value="BOX DETECTED" align="center" rotation="-90 0 0" position="0 0.1 0.6" color="yellow" width="3"></a-text>
+            <a-box position="0 0.1 0" scale="0.2 0.2 0.2" color="yellow"></a-box>
         </a-marker>
+
+        <a-entity id="world-anchor" visible="false">
+            <a-entity id="statue-pivot">
+                <a-entity id="statue-model" position="0 0 0" scale="1 1 1"></a-entity>
+            </a-entity>
+        </a-entity>
 
         <a-entity camera></a-entity>
     </a-scene>
 
     <script>
-        const marker = document.querySelector('#hiro-marker');
-        const status = document.querySelector('#status');
+        const fileInput = document.getElementById('fileInput');
+        const statueModel = document.getElementById('statue-model');
+        const worldAnchor = document.getElementById('world-anchor');
+        const hiroMarker = document.getElementById('hiro-marker');
+        const status = document.getElementById('status');
+        const controls = document.getElementById('controls');
 
-        marker.addEventListener('markerFound', () => {
-            status.innerText = "MARKER FOUND!";
-            status.style.color = "#fbbf24";
-            console.log("Hiro Marker Found");
+        let isAnchored = false;
+
+        // 1. Load File
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const url = URL.createObjectURL(file);
+            
+            // Set the model
+            statueModel.setAttribute('gltf-model', url);
+            
+            status.innerText = "MODEL LOADED. SCAN HIRO.";
+            fileInput.style.display = "none";
+            controls.style.display = "block";
         });
 
-        marker.addEventListener('markerLost', () => {
-            status.innerText = "MARKER LOST - Scan again";
-            status.style.color = "#ff0000";
+        // 2. Anchor Logic
+        hiroMarker.addEventListener('markerFound', () => {
+            if (!isAnchored && statueModel.hasAttribute('gltf-model')) {
+                const worldPos = new THREE.Vector3();
+                hiroMarker.object3D.getWorldPosition(worldPos);
+                
+                const worldQuat = new THREE.Quaternion();
+                hiroMarker.object3D.getWorldQuaternion(worldQuat);
+
+                worldAnchor.object3D.position.copy(worldPos);
+                worldAnchor.object3D.quaternion.copy(worldQuat);
+                
+                worldAnchor.setAttribute('visible', 'true');
+                isAnchored = true;
+                status.innerText = "ANCHORED";
+            }
         });
+
+        // 3. UI Listeners
+        document.getElementById('scaleSlider').addEventListener('input', (e) => {
+            const s = e.target.value;
+            statueModel.setAttribute('scale', `${s} ${s} ${s}`);
+        });
+
+        document.getElementById('heightSlider').addEventListener('input', (e) => {
+            statueModel.setAttribute('position', `0 ${e.target.value} 0`);
+        });
+
+        function resetAnchor() {
+            isAnchored = false;
+            worldAnchor.setAttribute('visible', 'false');
+            status.innerText = "SCAN HIRO.";
+        }
     </script>
 </body>
 </html>
