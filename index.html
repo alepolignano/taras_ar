@@ -1,89 +1,331 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>15m Statue - Hiro Anchor</title>
-    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
-    <style>
-        body { margin: 0; overflow: hidden; font-family: sans-serif; }
-        #ui {
-            position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
-            z-index: 1000; background: rgba(0,0,0,0.8); color: white;
-            padding: 15px; border-radius: 10px; width: 280px; text-align: center;
-        }
-        .slider-wrap { margin: 10px 0; display: flex; align-items: center; gap: 5px; }
-        .slider-wrap label { font-size: 10px; width: 50px; color: #fbbf24; }
-        input[type="range"] { flex: 1; accent-color: #fbbf24; }
-        #status { font-size: 12px; font-weight: bold; margin-bottom: 10px; }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1">
+  <title>GPS AR Viewer</title>
+  <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; overflow: hidden; font-family: sans-serif; background: #000; }
+
+    /* ── Setup overlay ─────────────────────────────── */
+    #setup {
+      position: fixed; inset: 0; z-index: 1000;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: #111; color: #fff; padding: 20px; overflow-y: auto;
+    }
+    #setup h2 { margin: 0 0 20px; color: #fbbf24; font-size: 1.2rem; letter-spacing: 2px; }
+
+    .card {
+      background: #1e1e1e; border-radius: 12px; padding: 16px;
+      margin-bottom: 12px; width: 100%; max-width: 380px;
+    }
+    .card > label {
+      font-size: 10px; color: #fbbf24; text-transform: uppercase;
+      letter-spacing: 1px; display: block; margin-bottom: 8px;
+    }
+
+    input[type="number"], input[type="file"] {
+      width: 100%; padding: 9px 10px; border: 1px solid #333; border-radius: 8px;
+      background: #2a2a2a; color: #fff; font-size: 14px; margin-bottom: 6px;
+    }
+    .row { display: flex; gap: 8px; }
+    .row input { flex: 1; margin-bottom: 0; }
+
+    button {
+      padding: 9px 14px; border: none; border-radius: 8px;
+      background: #fbbf24; color: #000; font-weight: bold;
+      cursor: pointer; font-size: 13px;
+    }
+    button:active { filter: brightness(0.85); }
+    .btn-ghost { background: #333; color: #fff; }
+
+    #startBtn {
+      width: 100%; max-width: 380px; padding: 14px; font-size: 16px;
+      background: #22c55e; color: #fff; border-radius: 12px;
+    }
+    #startBtn:disabled { background: #2a2a2a; color: #555; cursor: not-allowed; }
+
+    .slider-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+    .slider-row .lbl { font-size: 11px; color: #9ca3af; width: 60px; }
+    .slider-row input[type="range"] { flex: 1; accent-color: #fbbf24; }
+    .slider-row .val { width: 32px; text-align: right; font-size: 12px; color: #fff; }
+
+    .hint      { font-size: 11px; color: #6b7280; margin-top: 6px; }
+    .hint.ok   { color: #22c55e; }
+    .hint.warn { color: #fbbf24; }
+    .hint.err  { color: #ef4444; }
+
+    /* ── AR HUD ────────────────────────────────────── */
+    #hud {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 500;
+      display: none; /* shown via JS */
+      background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);
+      padding: 10px 14px; color: #fff; font-size: 12px;
+      justify-content: space-between; align-items: center;
+    }
+    #hud .info { display: flex; gap: 14px; }
+
+    #controls-bar {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 500;
+      display: none; /* shown via JS */
+      background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+      padding: 10px 18px 22px;
+      flex-direction: column; gap: 6px;
+    }
+    #controls-bar .lbl { color: #d1d5db; }
+  </style>
 </head>
-<body style="margin: 0; overflow: hidden;">
+<body>
 
-    <div id="ui">
-        <div id="status">1. UPLOAD GLB</div>
-        <input type="file" id="fileInput" accept=".glb" style="font-size: 11px;">
-        
-        <div id="controls" style="display:none;">
-            <div class="slider-wrap">
-                <label>SCALE</label>
-                <input type="range" id="scaleSlider" min="0.1" max="30" step="0.1" value="1">
-            </div>
-            <div class="slider-wrap">
-                <label>HEIGHT</label>
-                <input type="range" id="heightSlider" min="-10" max="10" step="0.1" value="0">
-            </div>
-            <div id="status-msg" style="font-size: 10px; color: #fbbf24;">Point at Hiro Marker</div>
-        </div>
+<!-- ══ SETUP UI ════════════════════════════════════════════════════ -->
+<div id="setup">
+  <h2>GPS AR VIEWER</h2>
+
+  <!-- 1. Model -->
+  <div class="card">
+    <label>1 — 3D Model (.glb)</label>
+    <input type="file" id="fileInput" accept=".glb">
+    <div id="modelStatus" class="hint">No model loaded</div>
+  </div>
+
+  <!-- 2. Coordinates -->
+  <div class="card">
+    <label>2 — Target GPS Coordinates</label>
+    <div class="row" style="margin-bottom:8px;">
+      <input type="number" id="latInput" placeholder="Latitude"  step="0.000001">
+      <input type="number" id="lonInput" placeholder="Longitude" step="0.000001">
     </div>
+    <button class="btn-ghost" id="gpsBtn" onclick="getMyGPS()">Use My Location</button>
+    <div id="gpsStatus" class="hint" style="margin-top:6px;"></div>
+  </div>
 
-    <a-scene 
-        embedded 
-        vr-mode-ui="enabled: false" 
-        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_camera;">
-        
-        <a-assets id="assets-list"></a-assets>
+  <!-- 3. Settings -->
+  <div class="card">
+    <label>3 — Model Settings</label>
+    <div class="slider-row">
+      <span class="lbl">Scale</span>
+      <input type="range" id="scaleSetup" min="0.5" max="100" step="0.5" value="10">
+      <span class="val" id="scaleVal">10</span>
+    </div>
+    <div class="slider-row">
+      <span class="lbl">Height (m)</span>
+      <input type="range" id="heightSetup" min="-10" max="50" step="0.5" value="0">
+      <span class="val" id="heightVal">0</span>
+    </div>
+  </div>
 
-        <a-marker preset="hiro" id="hiro-marker">
-            <a-ring color="#fbbf24" rotation="-90 0 0" radius-inner="0.4" radius-outer="0.5"></a-ring>
-            
-            <a-entity id="statue-container" position="0 0 0" scale="1 1 1">
-                <a-entity id="statue-model"></a-entity>
-            </a-entity>
-        </a-marker>
+  <button id="startBtn" disabled onclick="startAR()">START AR</button>
+</div>
 
-        <a-entity camera></a-entity>
-    </a-scene>
+<!-- ══ AR SCENE ════════════════════════════════════════════════════
+  videoTexture: true    → camera rendered as WebGL texture; objects
+                          are always drawn on top (visible through
+                          walls/buildings at any distance).
+  gpsMinDistance: 5     → ignore GPS updates < 5 m moved (kills noise).
+  gpsTimeInterval: 2000 → at most one GPS update every 2 s.
+  smoothingFactor: 0.05 → heavy low-pass on IMU/compass (0=frozen,
+                          1=raw). Greatly reduces shake & jitter.
+  far: 100000           → frustum extends to 100 km so distant
+                          objects are never clipped.
+-->
+<a-scene
+  id="arScene"
+  vr-mode-ui="enabled: false"
+  embedded
+  arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;">
 
-    <script>
-        const fileInput = document.getElementById('fileInput');
-        const statueModel = document.getElementById('statue-model');
-        const statueContainer = document.getElementById('statue-container');
-        const status = document.getElementById('status');
-        const controls = document.getElementById('controls');
+  <a-assets id="assetList"></a-assets>
 
-        // 1. Handle File Upload
-        fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const url = URL.createObjectURL(file);
-            
-            statueModel.setAttribute('gltf-model', url);
-            
-            status.innerText = "MODEL READY";
-            fileInput.style.display = "none";
-            controls.style.display = "block";
-        });
+  <a-camera
+    gps-new-camera="gpsMinDistance: 5; positionMinAccuracy: 200; gpsTimeInterval: 2000"
+    look-controls-enabled="false"
+    arjs-device-orientation-controls="smoothingFactor: 0.05"
+    far="100000">
+  </a-camera>
 
-        // 2. UI Adjustments
-        document.getElementById('scaleSlider').addEventListener('input', (e) => {
-            const s = e.target.value;
-            statueContainer.setAttribute('scale', `${s} ${s} ${s}`);
-        });
+</a-scene>
 
-        document.getElementById('heightSlider').addEventListener('input', (e) => {
-            const y = e.target.value;
-            statueContainer.setAttribute('position', `0 ${y} 0`);
-        });
-    </script>
+<!-- ══ AR HUD ══════════════════════════════════════════════════════ -->
+<div id="hud">
+  <div class="info">
+    <span id="distInfo">Target: —</span>
+    <span id="gpsInfo">GPS: waiting…</span>
+  </div>
+  <button class="btn-ghost" onclick="resetApp()"
+          style="padding:5px 11px; font-size:11px;">← Setup</button>
+</div>
+
+<!-- ══ LIVE CONTROLS ════════════════════════════════════════════════ -->
+<div id="controls-bar">
+  <div class="slider-row">
+    <span class="lbl">Scale</span>
+    <input type="range" id="scaleLive" min="0.5" max="100" step="0.5" value="10">
+    <span class="val" id="scaleLiveVal">10</span>
+  </div>
+  <div class="slider-row">
+    <span class="lbl">Height (m)</span>
+    <input type="range" id="heightLive" min="-10" max="50" step="0.5" value="0">
+    <span class="val" id="heightLiveVal">0</span>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────
+let modelUrl    = null;
+let modelEntity = null;
+let targetLat   = null;
+let targetLon   = null;
+let scale       = 10;
+let height      = 0;
+let gpsWatchId  = null;
+
+// ── Haversine distance in metres ───────────────────────────────────
+function haversine(lat1, lon1, lat2, lon2) {
+  const R  = 6371000;
+  const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180;
+  const dφ = (lat2 - lat1) * Math.PI / 180;
+  const dλ = (lon2 - lon1) * Math.PI / 180;
+  const a  = Math.sin(dφ/2)**2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(dλ/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function fmtDist(m) {
+  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(2)} km`;
+}
+
+// ── Setup: file input ──────────────────────────────────────────────
+document.getElementById('fileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  modelUrl = URL.createObjectURL(file);
+  const el = document.getElementById('modelStatus');
+  el.textContent = `✓ ${file.name}`;
+  el.className = 'hint ok';
+  checkReady();
+});
+
+['latInput', 'lonInput'].forEach(id =>
+  document.getElementById(id).addEventListener('input', checkReady)
+);
+
+function checkReady() {
+  const ok = modelUrl
+    && document.getElementById('latInput').value !== ''
+    && document.getElementById('lonInput').value !== '';
+  document.getElementById('startBtn').disabled = !ok;
+}
+
+// ── Setup: sliders ─────────────────────────────────────────────────
+document.getElementById('scaleSetup').addEventListener('input', (e) => {
+  scale = +e.target.value;
+  document.getElementById('scaleVal').textContent = scale;
+  if (modelEntity) applyProps();
+});
+document.getElementById('heightSetup').addEventListener('input', (e) => {
+  height = +e.target.value;
+  document.getElementById('heightVal').textContent = height;
+  if (modelEntity) applyProps();
+});
+
+// ── Get current GPS location ───────────────────────────────────────
+function getMyGPS() {
+  const btn = document.getElementById('gpsBtn');
+  const st  = document.getElementById('gpsStatus');
+  btn.disabled = true;
+  st.textContent = 'Acquiring GPS…';
+  st.className = 'hint';
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      document.getElementById('latInput').value = pos.coords.latitude.toFixed(7);
+      document.getElementById('lonInput').value = pos.coords.longitude.toFixed(7);
+      const acc = Math.round(pos.coords.accuracy);
+      st.textContent = `±${acc} m accuracy`;
+      st.className   = acc < 20 ? 'hint ok' : acc < 60 ? 'hint warn' : 'hint err';
+      btn.disabled = false;
+      checkReady();
+    },
+    (err) => {
+      st.textContent = `GPS error: ${err.message}`;
+      st.className   = 'hint err';
+      btn.disabled = false;
+    },
+    { enableHighAccuracy: true, timeout: 20000 }
+  );
+}
+
+// ── Start AR ───────────────────────────────────────────────────────
+function startAR() {
+  targetLat = parseFloat(document.getElementById('latInput').value);
+  targetLon = parseFloat(document.getElementById('lonInput').value);
+  scale     = +document.getElementById('scaleSetup').value;
+  height    = +document.getElementById('heightSetup').value;
+
+  // Inject entity at GPS coords
+  modelEntity = document.createElement('a-entity');
+  modelEntity.setAttribute('gltf-model', modelUrl);
+  modelEntity.setAttribute('gps-new-entity-place',
+    `latitude: ${targetLat}; longitude: ${targetLon}`);
+  applyProps();
+  document.getElementById('arScene').appendChild(modelEntity);
+
+  // Sync live controls
+  document.getElementById('scaleLive').value         = scale;
+  document.getElementById('scaleLiveVal').textContent = scale;
+  document.getElementById('heightLive').value        = height;
+  document.getElementById('heightLiveVal').textContent = height;
+
+  // Show AR UI
+  document.getElementById('setup').style.display        = 'none';
+  document.getElementById('hud').style.display          = 'flex';
+  document.getElementById('controls-bar').style.display = 'flex';
+
+  // Track distance
+  gpsWatchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const d = haversine(pos.coords.latitude, pos.coords.longitude, targetLat, targetLon);
+      document.getElementById('distInfo').textContent = `Target: ${fmtDist(d)}`;
+      document.getElementById('gpsInfo').textContent  = `GPS ±${Math.round(pos.coords.accuracy)} m`;
+    },
+    () => { document.getElementById('gpsInfo').textContent = 'GPS unavailable'; },
+    { enableHighAccuracy: true }
+  );
+}
+
+function applyProps() {
+  modelEntity.setAttribute('scale',    `${scale} ${scale} ${scale}`);
+  modelEntity.setAttribute('position', `0 ${height} 0`);
+}
+
+// ── Live controls ──────────────────────────────────────────────────
+document.getElementById('scaleLive').addEventListener('input', (e) => {
+  scale = +e.target.value;
+  document.getElementById('scaleLiveVal').textContent = scale;
+  if (modelEntity) applyProps();
+});
+document.getElementById('heightLive').addEventListener('input', (e) => {
+  height = +e.target.value;
+  document.getElementById('heightLiveVal').textContent = height;
+  if (modelEntity) applyProps();
+});
+
+// ── Reset to setup ─────────────────────────────────────────────────
+function resetApp() {
+  if (modelEntity) {
+    modelEntity.parentNode.removeChild(modelEntity);
+    modelEntity = null;
+  }
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
+  document.getElementById('setup').style.display        = 'flex';
+  document.getElementById('hud').style.display          = 'none';
+  document.getElementById('controls-bar').style.display = 'none';
+}
+</script>
 </body>
 </html>
